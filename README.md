@@ -14,7 +14,7 @@ Lecturner takes a PDF or text file and produces a narrated MP3, paragraph by par
 4. **Validate** — transcribe each WAV with Whisper and check phoneme error rate; quarantine glitched chunks automatically
 5. **Merge** — concatenate paragraph WAVs with tuned silence gaps, transcode to MP3 via ffmpeg
 
-Drop a stack of PDFs in a folder and run overnight. Wake up with a playlist.
+Drop a stack of PDFs in a folder and run overnight. Wake up with a playlist.  Yes it is a little slow.  Note that adding files to the batch after a batch has started will ignore the new files untill the next batch gets run.
 
 ---
 
