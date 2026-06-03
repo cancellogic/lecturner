@@ -26,7 +26,7 @@ Lecturner takes a PDF or text file and produces a narrated MP3, paragraph by par
 - [Python 3.8+](https://python.org)
 - [ffmpeg](https://ffmpeg.org) on PATH
 - `pip install pdfplumber`
-- You may need xcode or clang or gcc  for CUDA and building rust's Crane
+- You may need clang for CUDA builds
 
 **2. Build Crane** (the inference engine — not mine to distribute)
 ```bash
