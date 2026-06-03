@@ -4,50 +4,15 @@ Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professiona
 
 ---
 
-## What it does
+## Quick Start
 
-Lecturner takes a PDF or text file and produces a narrated MP3, paragraph by paragraph:
+**1. Install system tools**
+- [Rust](https://rustup.rs)
+- [Python 3.8+](https://python.org)
+- [ffmpeg](https://ffmpeg.org) on PATH
+- `pip install pdfplumber`
 
-1. **Rip** — extract clean prose from a PDF via `pdf_rip.py` (pdfplumber), handling two-column layouts, dropping references and captions
-2. **Clean** — rewrite extracted prose for natural spoken delivery using Qwen3-4B via Crane
-3. **Speak** — synthesise each paragraph via Qwen3-TTS CustomVoice (Crane)
-4. **Validate** — transcribe each WAV with Whisper and check phoneme error rate; quarantine glitched chunks automatically
-5. **Merge** — concatenate paragraph WAVs with tuned silence gaps, transcode to MP3 via ffmpeg
-
-Drop a stack of PDFs in a folder and run overnight. Wake up with a playlist.  Yes it is a little slow.  Note that adding files to the batch after a batch has started will ignore the new files untill the next batch gets run.
-
----
-
-## Hardware requirements
-
-| Platform | Minimum | Recommended |
-|---|---|---|
-| Windows | 16 GB RAM, NVIDIA GPU 8 GB VRAM | 24 GB VRAM |
-| macOS Apple Silicon | 16 GB unified memory | 24 GB |
-| Linux | 16 GB RAM, NVIDIA GPU 8 GB VRAM | 24 GB VRAM |
-
-Qwen3-4B and Qwen3-TTS-1.7B run sequentially, not concurrently — peak VRAM is ~8 GB.
-CPU-only is supported but synthesis will be slow.
-
----
-
-## Dependencies
-
-### System tools
-- **Rust** (stable, 2021 edition) — https://rustup.rs
-- **Python 3.8+** — for `pdf_rip.py` only
-- **ffmpeg** — for MP3 encoding; install via your package manager or https://ffmpeg.org
-
-### Python package
-```
-pip install pdfplumber
-```
-
-### Crane (LLM + TTS server)
-Lecturner uses [Crane](https://github.com/lucasjinreal/Crane) as its inference backend.
-Clone and build it yourself (not mine to distribute) — Lecturner expects the `crane-oai` binary on disk.   
-I'm quite impressed with crane.
-
+**2. Build Crane** (the inference engine — not mine to distribute)
 ```bash
 git clone https://github.com/lucasjinreal/Crane
 cd Crane
@@ -62,78 +27,41 @@ cargo build -p crane-oai --release --features metal
 cargo build -p crane-oai --release
 ```
 
-The binary lands at `Crane/target/release/crane-oai` (or `crane-oai.exe` on Windows).
-
-### Models
-Download with the `hf` CLI (Hugging Face):
-
+**3. Download models**
 ```bash
-# Qwen3-4B — LLM text cleanup
+# LLM text cleanup
 hf download Qwen/Qwen3-4B --local-dir checkpoints/Qwen3-4B
 
-# Qwen3-TTS — speech synthesis
+# TTS speech synthesis
 hf download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
   --local-dir Qwen3-TTS-12Hz-1.7B-CustomVoice
 
-# Whisper medium (English) — audio validation
+# Whisper audio validation
 mkdir models
 curl -L -o models/ggml-medium.en.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
-```
 
-### CMU Pronouncing Dictionary
-Used by Whisper validation for phoneme comparison. Public domain, from Carnegie Mellon University.
-
-```bash
+# CMU Pronouncing Dictionary (phoneme validation)
 curl -L -o cmudict.dict \
   https://raw.githubusercontent.com/cmusphinx/cmudict/master/cmudict.dict
 ```
 
-Place `cmudict.dict` in the project root (next to `Cargo.toml`). The build will fail with a clear error if it is absent.
+**4. Build Lecturner**
 
----
-
-## Build Lecturner
+Edit `Cargo.toml` first — uncomment the `whisper-rs` line that matches your platform (CUDA / Metal / CPU), then:
 
 ```bash
 git clone https://github.com/cancellogic/lecturner
 cd lecturner
-```
-
-Edit `Cargo.toml` to match your platform — uncomment the correct `whisper-rs` feature:
-
-```toml
-# Windows / Linux CUDA (default):
-whisper-rs = { version = "0.16", features = ["cuda"] }
-
-# macOS Metal:
-# whisper-rs = { version = "0.16", features = ["metal"] }
-
-# CPU only:
-# whisper-rs = { version = "0.16" }
-```
-
-Then build:
-
-```bash
-# Windows / Linux CUDA:
-cargo build --release
-
-# macOS / Linux Metal or CPU:
 cargo build --release
 ```
 
-The binary lands at `target/release/lecturner` (or `lecturner.exe`).
+**5. Configure**
 
----
-
-## Configuration
-
-Copy `lecturner.toml` next to the binary and edit the paths to match your system.
-At minimum you need to set:
+Edit `lecturner.toml` — at minimum set the four paths that point to your Crane binary and model directories:
 
 ```toml
-[gossip]
+[lecturner]
 crane_llm_bin   = "/path/to/Crane/target/release/crane-oai"
 crane_llm_model = "checkpoints/Qwen3-4B"
 
@@ -141,7 +69,38 @@ crane_tts_bin   = "/path/to/Crane/target/release/crane-oai"
 crane_tts_model = "Qwen3-TTS-12Hz-1.7B-CustomVoice"
 ```
 
-Available voices: `Ryan`, `Aiden`, `Vivian`, `Serena`, `Uncle_Fu`, `Dylan`, `Eric`, `Ono_Anna`, `Sohee`
+**6. Run**
+```bash
+# Drop PDFs or text files into batch/in/ then:
+lecturner --batch-pdf batch
+```
+
+---
+
+## What it does
+
+Lecturner takes a PDF or text file and produces a narrated MP3, paragraph by paragraph:
+
+1. **Rip** — extract clean prose from a PDF via `pdf_rip.py` (pdfplumber), handling two-column layouts, dropping references and captions
+2. **Clean** — rewrite extracted prose for natural spoken delivery using Qwen3-4B via Crane
+3. **Speak** — synthesise each paragraph via Qwen3-TTS CustomVoice (Crane)
+4. **Validate** — transcribe each WAV with Whisper and check phoneme error rate; quarantine glitched chunks automatically
+5. **Merge** — concatenate paragraph WAVs with tuned silence gaps, transcode to MP3 via ffmpeg
+
+Drop a stack of PDFs in a folder and run overnight. Wake up with a playlist. Yes, it is a little slow. Note that adding files to the batch after a batch has started will ignore the new files until the next batch run.
+
+---
+
+## Hardware requirements
+
+| Platform | Minimum | Recommended |
+|---|---|---|
+| Windows | 16 GB RAM, NVIDIA GPU 8 GB VRAM | 24 GB VRAM |
+| macOS Apple Silicon | 16 GB unified memory | 24 GB |
+| Linux | 16 GB RAM, NVIDIA GPU 8 GB VRAM | 24 GB VRAM |
+
+Qwen3-4B and Qwen3-TTS-1.7B run sequentially, not concurrently — peak VRAM is ~8 GB.
+CPU-only is supported but synthesis will be slow.
 
 ---
 
@@ -169,7 +128,7 @@ Extracts prose to `text.txt` and stops. Read it before a multi-hour synthesis ru
 ```bash
 lecturner --batch-pdf batch
 ```
-Processes every `.pdf` and `.txt` in `batch/in/` unattended. On first run it creates the directory tree for you — just drop files into `batch/in/` and fire it.
+Processes every `.pdf` and `.txt` in `batch/in/` unattended. On first run it creates the directory tree — just drop files into `batch/in/` and fire it.
 
 Output layout:
 ```
@@ -214,14 +173,12 @@ Lecturner is MIT licensed. The models it uses have their own licenses:
 Built with [Crane](https://github.com/lucasjinreal/Crane) by lucasjinreal —
 without Crane's Qwen3-TTS and Qwen3-4B inference this project would not exist.
 
-Pair programmed with Claude Sonnet (Anthropic)... 
+Pair programmed with Claude Sonnet (Anthropic).
 
-Crane and Claude got me through early days AI model python and c++ and fickle version/subversion dependency hell.  Some
-regret that python is still used to rip pdf text (sorry pdfplumber, you are a great program).  And regret for the 
-users that you need to break out grep curl hf and download the really important bits that make this program work.  
-Be sure to edit Lecturner.toml file paths to point at those important bits.   Cheers!
+Crane and Claude got me through early-days AI model Python and clang and C++ and fickle version/subversion dependency hell. Some regret that Python is still used to rip PDF text (sorry pdfplumber, you are a great program). And regret for the users that you need to break out grep, curl, hf, and download the really important bits that make this program work. Be sure to edit `lecturner.toml` file paths to point at those important bits. Cheers!
+
 ---
 
 ## License
 
-MIT — see `LICENSE`.  And I love a good shout out.
+MIT — see `LICENSE`. And I love a good shout out.
