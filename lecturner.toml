@@ -1,0 +1,102 @@
+# lecturner.toml — configuration for lecturner
+#
+# Place this file next to the lecturner binary (or in your working directory).
+# CLI flags override any value here.  Comment a line out to use the hard-coded default.
+#
+# All paths may be absolute or relative to the working directory.
+# On Windows use double backslashes: "C:\\path\\to\\file"
+
+[gossip]
+
+# ── Input / output ─────────────────────────────────────────────────────────────
+input   = "text.txt"       # default input text file (single-file mode)
+out_dir = "audio_out"      # where paragraph_NNN.wav files are written
+
+# ── Splitting ──────────────────────────────────────────────────────────────────
+max_words = 200            # sub-split paragraphs longer than this at sentence boundaries
+min_chars = 10             # ignore chunks shorter than this (strips headers, page numbers)
+
+# ── Output / timing ────────────────────────────────────────────────────────────
+merge            = true    # merge all paragraph WAVs into combined.wav
+to_mp3           = true    # transcode combined.wav → combined.mp3 via ffmpeg
+sentence_gap_ms  = 180     # silence inserted at sentence-boundary sub-splits (ms)
+paragraph_gap_ms = 360     # silence inserted between blank-line paragraph breaks (ms)
+rest_ms          = 300     # ms to sleep between HTTP synthesis requests
+
+# ── ffmpeg ─────────────────────────────────────────────────────────────────────
+ffmpeg_bin = "ffmpeg"      # "ffmpeg" if on PATH; otherwise full path e.g.
+                           # "C:\\ffmpeg\\bin\\ffmpeg.exe"
+
+# ── PDF ripping ────────────────────────────────────────────────────────────────
+# Uncomment to always rip a specific PDF before synthesising:
+# rip_pdf       = "paper.pdf"
+# rip_pdf_only  = false    # set true to rip without synthesising
+skip_refs      = true      # drop References/Bibliography section
+skip_captions  = true      # drop figure/table caption lines
+
+# python_bin is used only for pdf_rip.py.  "python" works if Python 3 is on PATH.
+# On some systems you may need "python3" or a full path.
+# python_bin = "python"
+
+# ── Whisper validation ─────────────────────────────────────────────────────────
+validate           = true                # enable post-synthesis Whisper PER validation
+whisper_model      = "ggml-medium.en.bin"
+whisper_model_dir  = "models"            # directory containing the .bin file
+validate_threshold = 0.18               # max acceptable phoneme error rate (0.0–1.0)
+                                        # 0.18 catches real glitches; homophones pass
+
+# Download the model with:
+#   mkdir models
+#   curl -L -o models/ggml-medium.en.bin \
+#     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
+
+# ── LLM text cleanup ───────────────────────────────────────────────────────────
+# Rewrites extracted PDF prose to be natural when read aloud, using Qwen3-4B
+# via crane-oai.  Runs paragraph-by-paragraph before chunking.
+# Defaults to true when --rip-pdf is used, false otherwise.
+#
+ llm_clean = true
+
+# Path to the crane-oai binary.
+# Build Crane from source: https://github.com/lucasjinreal/Crane
+# Then set the path to the compiled binary:
+#
+# Windows:
+# crane_llm_bin = "C:\\path\\to\\Crane\\target\\release\\crane-oai.exe"
+# macOS / Linux:
+# crane_llm_bin = "/path/to/Crane/target/release/crane-oai"
+
+# Path to your Qwen3-4B checkpoint directory.
+# Download with: hf download Qwen/Qwen3-4B --local-dir checkpoints/Qwen3-4B
+# crane_llm_model = "checkpoints/Qwen3-4B"
+
+crane_llm_port    = 8101   # separate port from TTS (8102)
+crane_llm_timeout = 60     # seconds to wait for crane-oai to load the model
+
+# ── TTS (Crane + Qwen3-TTS) ───────────────────────────────────────────────────
+# crane_tts_bin can be the same binary as crane_llm_bin — they run sequentially.
+#
+# Windows:
+# crane_tts_bin = "C:\\path\\to\\Crane\\target\\release\\crane-oai.exe"
+# macOS / Linux:
+# crane_tts_bin = "/path/to/Crane/target/release/crane-oai"
+
+# Path to your Qwen3-TTS checkpoint directory.
+# Download with:
+#   hf download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
+#     --local-dir Qwen3-TTS-12Hz-1.7B-CustomVoice
+# crane_tts_model = "Qwen3-TTS-12Hz-1.7B-CustomVoice"
+
+crane_tts_port    = 8102   # separate port from LLM crane (8101)
+crane_tts_timeout = 60     # seconds to wait for crane-oai to load the TTS model
+
+# Named speaker voice.
+# Available: Ryan, Aiden, Vivian, Serena, Uncle_Fu, Dylan, Eric, Ono_Anna, Sohee
+crane_tts_voice = "Aiden"
+
+# Optional speaking style instruction passed to the model.
+# Keep it simple — the model's expressive range is narrow.
+crane_tts_instruct = "read clearly and calmly at a medium pace."
+
+# Optional language hint (e.g. "en", "zh").  Omit for English.
+# crane_tts_language = "en"
