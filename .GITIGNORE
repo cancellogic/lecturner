@@ -1,0 +1,34 @@
+# Build output
+/target/
+
+# Runtime output directories
+/audio_out/
+/batch/
+
+# Model weights — too large to commit, user downloads these
+/models/
+/checkpoints/
+/Qwen3-TTS-*/
+
+# Working text files
+text.txt
+text_cleaned.txt
+*.txt.bak
+
+# Personal audio / voice clones
+*.wav
+*.mp3
+
+# Crane binary tree — user builds from source
+/Crane/target/
+
+# Handoff / session notes
+handoff*.txt
+
+# PDF source material
+*.pdf
+
+# IDE
+.vscode/
+.idea/
+*.swp
