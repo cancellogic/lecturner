@@ -4,13 +4,31 @@ Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professiona
 
 ---
 
+## What it does
+
+Lecturner takes a PDF or text file and produces a narrated MP3, paragraph by paragraph:
+
+1. **Rip** — extract clean prose from a PDF via `pdf_rip.py` (pdfplumber), handling two-column layouts, dropping references and captions
+2. **Clean** — rewrite extracted prose for natural spoken delivery using Qwen3-4B via Crane
+3. **Speak** — synthesise each paragraph via Qwen3-TTS CustomVoice (Crane)
+4. **Validate** — transcribe each WAV with Whisper and check phoneme error rate; quarantine glitched chunks automatically
+5. **Merge** — concatenate paragraph WAVs with tuned silence gaps, transcode to MP3 via ffmpeg
+
+Drop a stack of PDFs in a folder and run overnight. Wake up with a playlist. Yes, it is a little slow. Note that adding files to the batch after a batch has started results in ignored the new files until the next batch run.
+---
+
 ## Quick Start
+**Before you begin you need**
+- **Windows**: MSVC build tools (Visual Studio Build Tools, C++ workload) + CUDA toolkit
+- **macOS**: `xcode-select --install`
+- **Linux**: `apt install build-essential libclang-dev` + CUDA toolkit if using GPU
 
 **1. Install system tools**
 - [Rust](https://rustup.rs)
 - [Python 3.8+](https://python.org)
 - [ffmpeg](https://ffmpeg.org) on PATH
 - `pip install pdfplumber`
+- You may need xcode or clang or gcc  for CUDA and building rust's Crane
 
 **2. Build Crane** (the inference engine — not mine to distribute)
 ```bash
@@ -74,21 +92,6 @@ crane_tts_model = "Qwen3-TTS-12Hz-1.7B-CustomVoice"
 # Drop PDFs or text files into batch/in/ then:
 lecturner --batch-pdf batch
 ```
-
----
-
-## What it does
-
-Lecturner takes a PDF or text file and produces a narrated MP3, paragraph by paragraph:
-
-1. **Rip** — extract clean prose from a PDF via `pdf_rip.py` (pdfplumber), handling two-column layouts, dropping references and captions
-2. **Clean** — rewrite extracted prose for natural spoken delivery using Qwen3-4B via Crane
-3. **Speak** — synthesise each paragraph via Qwen3-TTS CustomVoice (Crane)
-4. **Validate** — transcribe each WAV with Whisper and check phoneme error rate; quarantine glitched chunks automatically
-5. **Merge** — concatenate paragraph WAVs with tuned silence gaps, transcode to MP3 via ffmpeg
-
-Drop a stack of PDFs in a folder and run overnight. Wake up with a playlist. Yes, it is a little slow. Note that adding files to the batch after a batch has started will ignore the new files until the next batch run.
-
 ---
 
 ## Hardware requirements
