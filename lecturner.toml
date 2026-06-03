@@ -6,7 +6,7 @@
 # All paths may be absolute or relative to the working directory.
 # On Windows use double backslashes: "C:\\path\\to\\file"
 
-[gossip]
+[lecturner]
 
 # ── Input / output ─────────────────────────────────────────────────────────────
 input   = "text.txt"       # default input text file (single-file mode)

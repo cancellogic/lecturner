@@ -1,4 +1,4 @@
-//! records.rs — persistent run and chunk outcome types for gossip.
+//! records.rs — persistent run and chunk outcome types for lecturner.
 //!
 //! `RunRecord` is written to `out_dir/run.json` after each chunk is processed.
 //! `--merge-only` and `--fix-quarantine` read this file instead of re-parsing

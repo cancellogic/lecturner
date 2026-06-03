@@ -1,4 +1,4 @@
-//! gossip — paragraph-by-paragraph audiobook pipeline.
+//! lecturner — paragraph-by-paragraph audiobook pipeline.
 //!
 //! Reads `text.txt`, optionally rips a PDF and rewrites prose via an LLM,
 //! splits on blank lines into paragraphs, sends each chunk to a Crane
@@ -7,10 +7,10 @@
 //! optionally merges into `combined.wav` and transcodes to `combined.mp3`
 //! via ffmpeg.
 //!
-//! Config file (`gossip.toml` next to the binary) provides defaults so you
+//! Config file (`lecturner.toml` next to the binary) provides defaults so you
 //! don't have to retype them.  CLI flags always win over the config.
 //!
-//! Minimal launch once gossip.toml is set up:
+//! Minimal launch once lecturner.toml is set up:
 //!   cargo run --release
 
 mod records;
@@ -32,9 +32,9 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 // ─── Config file shape ─────────────────────────────────────────────────────────
 //
-// gossip.toml — every field is optional; missing = use the hard-coded default.
+// lecturner.toml — every field is optional; missing = use the hard-coded default.
 //
-// [gossip]
+// [lecturner]
 // input            = "text.txt"
 // out_dir          = "audio_out"
 // rest_ms          = 500
@@ -48,12 +48,12 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 // crane_tts_voice  = "Aiden"
 
 #[derive(Deserialize, Default, Debug)]
-struct GossipTomlConfig {
-    gossip: Option<GossipConfig>,
+struct LecturnerTomlConfig {
+    lecturner: Option<LecturnerConfig>,
 }
 
 #[derive(Deserialize, Default, Debug)]
-struct GossipConfig {
+struct LecturnerConfig {
     input:                Option<String>,
     out_dir:              Option<String>,
     rest_ms:              Option<u64>,
@@ -90,11 +90,11 @@ struct GossipConfig {
     crane_tts_instruct:   Option<String>,   // speaking style hint; None = omit
 }
 
-fn load_toml_config() -> GossipConfig {
-    // Look for gossip.toml next to the binary, then next to CWD.
+fn load_toml_config() -> LecturnerConfig {
+    // Look for lecturner.toml next to the binary, then next to CWD.
     let candidates: Vec<PathBuf> = [
-        std::env::current_exe().ok().and_then(|mut p| { p.pop(); Some(p.join("gossip.toml")) }),
-        Some(PathBuf::from("gossip.toml")),
+        std::env::current_exe().ok().and_then(|mut p| { p.pop(); Some(p.join("lecturner.toml")) }),
+        Some(PathBuf::from("lecturner.toml")),
     ]
     .into_iter()
     .flatten()
@@ -103,16 +103,16 @@ fn load_toml_config() -> GossipConfig {
     for path in &candidates {
         if path.exists() {
             let raw = fs::read_to_string(path).unwrap_or_default();
-            match toml::from_str::<GossipTomlConfig>(&raw) {
+            match toml::from_str::<LecturnerTomlConfig>(&raw) {
                 Ok(cfg) => {
-                    println!("[gossip] Config loaded from {}", path.display());
-                    return cfg.gossip.unwrap_or_default();
+                    println!("[lecturner] Config loaded from {}", path.display());
+                    return cfg.lecturner.unwrap_or_default();
                 }
-                Err(e) => eprintln!("[gossip] Warning: Could not parse {}: {e}", path.display()),
+                Err(e) => eprintln!("[lecturner] Warning: Could not parse {}: {e}", path.display()),
             }
         }
     }
-    GossipConfig::default()
+    LecturnerConfig::default()
 }
 
 // ─── CLI ───────────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ fn load_toml_config() -> GossipConfig {
 #[command(author, version, about, after_help = "Dustan's Gossip works text and pdfs to spoken audio for personal use.
 Greatly assisted by Claude Sonnet 4.6 (pair programmer),
 Qwen3-TTS CustomVoice and Qwen3-4B for voice and text processing.  
-(you'll need to correct the file paths are in the gossip.toml program settings file.  
+(you'll need to correct the file paths are in the lecturner.toml program settings file.  
 Your user directory is not my user directory and all.  Windows Cuda centric build
 that might work on linux and mac with 16gb+ memory. )
 
@@ -130,22 +130,22 @@ MODES
 ─────
   Single file (default)
     cargo run --release
-    Reads gossip.toml -> text.txt -> audio_out/combined.mp3
+    Reads lecturner.toml -> text.txt -> audio_out/combined.mp3
     Assumes text.txt already exists.  Use --rip-pdf to produce it first.
 
   Single PDF, one command
-    gossip --rip-pdf paper.pdf
+    lecturner --rip-pdf paper.pdf
     Rips paper.pdf -> text.txt, runs LLM cleanup, synthesises, produces
-    audio_out/combined.mp3.  Set llm_clean = true in gossip.toml (automatic
+    audio_out/combined.mp3.  Set llm_clean = true in lecturner.toml (automatic
     when --rip-pdf is used).
 
   Rip only (no audio)
-    gossip --rip-pdf paper.pdf --rip-pdf-only
+    lecturner --rip-pdf paper.pdf --rip-pdf-only
     Extracts prose to text.txt and stops.  Useful for inspecting the text
     before committing a multi-hour synthesis run.
 
   Batch overnight
-    gossip --batch-pdf C:\\Users\\dusta\\Prog\\gossip\\batch
+    lecturner --batch-pdf batch
     Processes every .pdf and .txt found in batch\\in\\ unattended.
     Outputs:
       batch\\audio\\             rosencrantz_guildenstern.mp3
@@ -157,25 +157,25 @@ MODES
     Omit the path to use a 'batch' directory next to the binary.
 
   Repair quarantined chunks
-    gossip --fix-quarantine
+    lecturner --fix-quarantine
     Re-synthesises chunks that failed Whisper validation in a previous run.
     Run --merge-only afterwards to rebuild combined.wav with recovered chunks.
 
   Rebuild audio without re-synthesising
-    gossip --merge-only
+    lecturner --merge-only
     Re-merges existing paragraph WAVs from run.json.  Useful after
     --fix-quarantine or manual WAV edits.
 
 VALIDATION
 ----------
-  Set validate = true in gossip.toml to enable Whisper PER checking.
+  Set validate = true in lecturner.toml to enable Whisper PER checking.
   Chunks that exceed validate_threshold after one retry are quarantined
   (not included in the merge).  Use --fix-quarantine to retry them.
 
 CONFIG PRIORITY
 ---------------
-  CLI flag  >  gossip.toml  >  hard-coded default
-  gossip.toml is searched next to the binary, then in the working directory.
+  CLI flag  >  lecturner.toml  >  hard-coded default
+  lecturner.toml is searched next to the binary, then in the working directory.
 ")]
 struct CliArgs {
     /// Input text file (paragraphs separated by blank lines)
@@ -297,7 +297,7 @@ struct Config {
 
 /// Merge TOML defaults + CLI overrides into a single resolved Config.
 /// Priority (highest→lowest): CLI flag → TOML value → hard-coded default.
-fn resolve_config(cli: CliArgs, toml: GossipConfig) -> Config {
+fn resolve_config(cli: CliArgs, toml: LecturnerConfig) -> Config {
     // Helper macros that read "cli field or toml field or literal default".
     macro_rules! pick {
         ($cli:expr, $toml:expr, $default:expr) => {
@@ -684,7 +684,7 @@ pub fn merge_wavs(
         .with_context(|| format!("Cannot write: {}", output_path.display()))?;
 
     println!(
-        "[gossip] Merged {} file(s) → {} ({:.1} MB)",
+        "[lecturner] Merged {} file(s) → {} ({:.1} MB)",
         loaded.len(), output_path.display(),
         out.len() as f64 / 1_048_576.0,
     );
@@ -787,7 +787,7 @@ pub fn load_whisper_model(model_path: &std::path::Path) -> Result<WhisperContext
         model_path.exists(),
         "Whisper model not found: {}.\n\
          Download: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin\n\
-         Place it in the models/ directory (or set whisper_model_dir in gossip.toml).",
+         Place it in the models/ directory (or set whisper_model_dir in lecturner.toml).",
         model_path.display()
     );
     let params = WhisperContextParameters::default();
@@ -1139,15 +1139,15 @@ fn locate_pdf_rip_script(explicit: &Option<PathBuf>) -> Option<PathBuf> {
 ///   2. Spawn Python with the script; capture stdout for progress lines.
 ///   3. Detect exit code 1 = missing pdfplumber dep → print friendly install hint.
 ///   4. Detect exit code 2 = extraction error → surface stderr.
-///   5. On success, gossip's normal input file now contains the extracted prose.
+///   5. On success, lecturner's normal input file now contains the extracted prose.
 fn rip_pdf(cfg: &Config, pdf_path: &PathBuf) -> Result<()> {
     let script = locate_pdf_rip_script(&None)
-        .context("Cannot find pdf_rip.py.  Put it next to gossip.exe or in the working directory.")?;
+        .context("Cannot find pdf_rip.py.  Put it next to lecturner.exe or in the working directory.")?;
 
     let out_path = cfg.input.to_str().context("Non-UTF8 output path")?;
     let pdf_str  = pdf_path.to_str().context("Non-UTF8 PDF path")?;
 
-    println!("[gossip] Ripping PDF: {} → {}", pdf_path.display(), cfg.input.display());
+    println!("[lecturner] Ripping PDF: {} → {}", pdf_path.display(), cfg.input.display());
 
     let mut cmd = Command::new(&cfg.python_bin);
     cmd.arg(&script)
@@ -1309,17 +1309,17 @@ fn ensure_crane_llm_running(cfg: &Config, client: &Client) -> Result<Option<Chil
 
     // Already up — maybe the user launched it manually or it's from a prior run.
     if matches!(client.get(&health).timeout(Duration::from_secs(2)).send(), Ok(_)) {
-        println!("[gossip] Crane LLM server already running at {}", base_url);
+        println!("[lecturner] Crane LLM server already running at {}", base_url);
         return Ok(None);
     }
 
     let bin = locate_crane_bin(&cfg.crane_llm_bin).context(
-        "Cannot find crane-oai binary.  Set crane_llm_bin in gossip.toml \
+        "Cannot find crane-oai binary.  Set crane_llm_bin in lecturner.toml \
          or place crane-oai on PATH."
     )?;
 
     let model_path = cfg.crane_llm_model.as_ref().context(
-        "crane_llm_model not set in gossip.toml.  \
+        "crane_llm_model not set in lecturner.toml.  \
          Point it at your Qwen2.5-Instruct checkpoint directory."
     )?;
 
@@ -1330,7 +1330,7 @@ fn ensure_crane_llm_running(cfg: &Config, client: &Client) -> Result<Option<Chil
     );
 
     println!(
-        "[gossip] Launching Crane LLM: {} --model-path {} --model-type qwen3 --port {}",
+        "[lecturner] Launching Crane LLM: {} --model-path {} --model-type qwen3 --port {}",
         bin.display(), model_path.display(), cfg.crane_llm_port
     );
 
@@ -1342,7 +1342,7 @@ fn ensure_crane_llm_running(cfg: &Config, client: &Client) -> Result<Option<Chil
         .with_context(|| format!("Failed to spawn crane-oai ({})", bin.display()))?;
 
     // Poll until ready.  Qwen3-4B loads in roughly 15-30s on an RTX 4080.
-    print!("[gossip] Waiting for Crane LLM to load model");
+    print!("[lecturner] Waiting for Crane LLM to load model");
     use std::io::Write;
     let poll_steps = cfg.crane_llm_timeout / 2;
     for _ in 0..poll_steps {
@@ -1378,7 +1378,7 @@ fn ensure_crane_tts_running(cfg: &Config, client: &Client) -> Result<Option<Chil
     let uncle_fu_check = format!("{}/health", base_url); // polling the voice butler
 
     if matches!(client.get(&uncle_fu_check).timeout(Duration::from_secs(2)).send(), Ok(_)) {
-        println!("[gossip] Crane TTS server already running at {}", base_url);
+        println!("[lecturner] Crane TTS server already running at {}", base_url);
         return Ok(None);
     }
 
@@ -1387,12 +1387,12 @@ fn ensure_crane_tts_running(cfg: &Config, client: &Client) -> Result<Option<Chil
     let bin = locate_crane_bin(&cfg.crane_tts_bin)
         .or_else(|| locate_crane_bin(&cfg.crane_llm_bin))
         .context(
-            "Cannot find crane-oai binary for TTS.  Set crane_tts_bin in gossip.toml \
+            "Cannot find crane-oai binary for TTS.  Set crane_tts_bin in lecturner.toml \
              or place crane-oai on PATH."
         )?;
 
     let model_path = cfg.crane_tts_model.as_ref().context(
-        "crane_tts_model not set in gossip.toml.  \
+        "crane_tts_model not set in lecturner.toml.  \
          Point it at your Qwen3-TTS checkpoint directory."
     )?;
 
@@ -1403,7 +1403,7 @@ fn ensure_crane_tts_running(cfg: &Config, client: &Client) -> Result<Option<Chil
     );
 
     println!(
-        "[gossip] Launching Crane TTS: {} --model-path {} --model-type qwen3-tts --port {}",
+        "[lecturner] Launching Crane TTS: {} --model-path {} --model-type qwen3-tts --port {}",
         bin.display(), model_path.display(), cfg.crane_tts_port
     );
 
@@ -1416,7 +1416,7 @@ fn ensure_crane_tts_running(cfg: &Config, client: &Client) -> Result<Option<Chil
 
     // Qwen3-TTS-1.7B loads faster than the 4B LLM, but give it the same
     // timeout headroom in case of VRAM pressure from other processes.
-    print!("[gossip] Waiting for Crane TTS to load model");
+    print!("[lecturner] Waiting for Crane TTS to load model");
     use std::io::Write;
     let poll_steps = cfg.crane_tts_timeout / 2;
     for _ in 0..poll_steps {
@@ -1534,7 +1534,7 @@ fn llm_clean_text(
         .collect();
 
     let total = paragraphs.len();
-    println!("[gossip] LLM cleanup: {} paragraph(s) via Crane at {}",
+    println!("[lecturner] LLM cleanup: {} paragraph(s) via Crane at {}",
         total, crane_llm_url(cfg));
 
     let words_before: usize = paragraphs.iter()
@@ -1549,7 +1549,7 @@ fn llm_clean_text(
     for (i, &para) in paragraphs.iter().enumerate() {
         let ordinal = i + 1;
         let preview: String = para.chars().take(60).collect();
-        print!("[gossip] [llm {ordinal}/{total}] \"{preview}…\" ");
+        print!("[lecturner] [llm {ordinal}/{total}] \"{preview}…\" ");
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
@@ -1582,7 +1582,7 @@ fn llm_clean_text(
     );
     fs::write(&cleaned_path, &cleaned_text)
         .with_context(|| format!("Cannot write {}", cleaned_path.display()))?;
-    println!("[gossip] LLM cleanup done: {n_changed}/{total} rewritten, \
+    println!("[lecturner] LLM cleanup done: {n_changed}/{total} rewritten, \
         {n_dropped} dropped → {}", cleaned_path.display());
 
     let record = LlmCleanRecord {
@@ -1615,7 +1615,7 @@ fn run_merge_only(cfg: &Config) -> Result<()> {
     for rec in run.chunks.iter().filter(|r| r.is_mergeable()) {
         let wav_path = cfg.out_dir.join(&rec.wav);
         if !wav_path.exists() {
-            eprintln!("[gossip] Warning: {} listed as Ok but not on disk — skipping", rec.wav);
+            eprintln!("[lecturner] Warning: {} listed as Ok but not on disk — skipping", rec.wav);
             continue;
         }
         wav_paths.push(wav_path);
@@ -1626,14 +1626,14 @@ fn run_merge_only(cfg: &Config) -> Result<()> {
         anyhow::bail!("No mergeable WAVs found in run.json");
     }
 
-    println!("[gossip] --merge-only: {} WAV(s) to merge", wav_paths.len());
+    println!("[lecturner] --merge-only: {} WAV(s) to merge", wav_paths.len());
     let combined_path = cfg.out_dir.join("combined.wav");
     merge_wavs(&wav_paths, &boundaries, &combined_path, cfg.sentence_gap_ms, cfg.paragraph_gap_ms)?;
 
     if cfg.to_mp3 && combined_path.exists() {
         match wav_to_mp3(&cfg.ffmpeg_bin, &combined_path) {
-            Ok(mp3_path) => println!("[gossip] MP3 written → {}", mp3_path.display()),
-            Err(e)       => eprintln!("[gossip] ffmpeg transcode failed: {e:#}"),
+            Ok(mp3_path) => println!("[lecturner] MP3 written → {}", mp3_path.display()),
+            Err(e)       => eprintln!("[lecturner] ffmpeg transcode failed: {e:#}"),
         }
     }
     Ok(())
@@ -1661,11 +1661,11 @@ fn run_fix_quarantine(cfg: &Config, client: &Client, wstate: &mut Option<Whisper
         .collect();
 
     if retry_indices.is_empty() {
-        println!("[gossip] No quarantined chunks found in run.json.");
+        println!("[lecturner] No quarantined chunks found in run.json.");
         return Ok(());
     }
 
-    println!("[gossip] --fix-quarantine: {} chunk(s) to retry", retry_indices.len());
+    println!("[lecturner] --fix-quarantine: {} chunk(s) to retry", retry_indices.len());
 
     let mut recovered = 0usize;
     let mut still_bad = 0usize;
@@ -1677,13 +1677,13 @@ fn run_fix_quarantine(cfg: &Config, client: &Client, wstate: &mut Option<Whisper
         let original_text = match rec.quarantined_text() {
             Some(t) => t.to_owned(),
             None    => {
-                eprintln!("[gossip] Chunk {ordinal}: Failed record (server error), skipping.");
+                eprintln!("[lecturner] Chunk {ordinal}: Failed record (server error), skipping.");
                 still_bad += 1;
                 continue;
             }
         };
 
-        println!("[gossip] Retrying chunk {ordinal}: \"{}…\"",
+        println!("[lecturner] Retrying chunk {ordinal}: \"{}…\"",
             original_text.chars().take(60).collect::<String>());
 
         // Aggressive sanitization pass before re-synthesis.
@@ -1737,11 +1737,11 @@ fn run_fix_quarantine(cfg: &Config, client: &Client, wstate: &mut Option<Whisper
     }
 
     println!(
-        "\n[gossip] Fix complete: {} recovered, {} still quarantined.",
+        "\n[lecturner] Fix complete: {} recovered, {} still quarantined.",
         recovered, still_bad
     );
     if recovered > 0 {
-        println!("[gossip] Run with --merge-only to rebuild combined.wav with recovered chunks.");
+        println!("[lecturner] Run with --merge-only to rebuild combined.wav with recovered chunks.");
     }
     Ok(())
 }
@@ -1766,7 +1766,7 @@ enum JobOutcome {
 
 /// One line appended to batch.log per event.  JSONL — one object per line.
 ///
-/// Design: minimal fields, human-readable, enough for gossip to count failures
+/// Design: minimal fields, human-readable, enough for lecturner to count failures
 /// per filename across a crash-interrupted run.
 #[derive(Serialize, Deserialize, Debug)]
 struct BatchLogEntry {
@@ -2010,7 +2010,7 @@ fn run_single_job(
         JobOutcome::Picturebook => {
             let marker = batch_dirs.audio.join(format!("{stem}_picturebook.txt"));
             let _ = fs::write(&marker,
-                format!("gossip batch: no audio produced for {stem}
+                format!("lecturner batch: no audio produced for {stem}
                          chunks={total}, failed={n_failed}, quarantined={n_quarantined}
 "));
             wipe_work_dir(&work_dir);
@@ -2300,9 +2300,9 @@ fn main() -> Result<()> {
         // Whisper is loaded once here and shared across all jobs in the batch.
         let whisper_ctx: Option<WhisperContext> = if cfg.validate {
             let model_path = cfg.whisper_model_dir.join(&cfg.whisper_model);
-            println!("[gossip] Loading Whisper model: {}", model_path.display());
+            println!("[lecturner] Loading Whisper model: {}", model_path.display());
             let ctx = load_whisper_model(&model_path)?;
-            println!("[gossip] Whisper ready — threshold={:.3}", cfg.validate_threshold);
+            println!("[lecturner] Whisper ready — threshold={:.3}", cfg.validate_threshold);
             Some(ctx)
         } else { None };
         let mut whisper_state: Option<WhisperState> = match whisper_ctx {
@@ -2328,9 +2328,9 @@ fn main() -> Result<()> {
 
         let whisper_ctx: Option<WhisperContext> = if cfg.validate {
             let model_path = cfg.whisper_model_dir.join(&cfg.whisper_model);
-            println!("[gossip] Loading Whisper model: {}", model_path.display());
+            println!("[lecturner] Loading Whisper model: {}", model_path.display());
             let ctx = load_whisper_model(&model_path)?;
-            println!("[gossip] Whisper ready.");
+            println!("[lecturner] Whisper ready.");
             Some(ctx)
         } else {
             None
@@ -2356,7 +2356,7 @@ fn main() -> Result<()> {
     if let Some(ref pdf_path) = cfg.rip_pdf.clone() {
         rip_pdf(&cfg, pdf_path)?;
         if cfg.rip_pdf_only {
-            println!("[gossip] PDF ripped to '{}' — exiting (--rip-pdf-only).", cfg.input.display());
+            println!("[lecturner] PDF ripped to '{}' — exiting (--rip-pdf-only).", cfg.input.display());
             return Ok(());
         }
     }
@@ -2364,7 +2364,7 @@ fn main() -> Result<()> {
     // ── 0b. LLM cleanup pass (if enabled) ─────────────────────────────────────
     // Rewrites the extracted prose paragraph-by-paragraph using Qwen2.5 via
     // crane-oai before chunking.  Runs only when llm_clean = true (automatic
-    // when --rip-pdf is used; opt-in otherwise via gossip.toml).
+    // when --rip-pdf is used; opt-in otherwise via lecturner.toml).
     // On completion the cleaned text replaces raw_text for all downstream steps;
     // the LlmCleanRecord is stored in run.json.
     let (raw_text, llm_clean_record) = {
@@ -2385,7 +2385,7 @@ fn main() -> Result<()> {
             // Crane LLM is only needed for the cleanup pass; shut it down now
             // so TTS crane can claim the GPU headroom before loading.
             if let Some(ref mut task) = crane_task {
-                println!("[gossip] Shutting down Crane LLM (pid {})…", task.id());
+                println!("[lecturner] Shutting down Crane LLM (pid {})…", task.id());
                 let _ = task.kill();
                 let _ = task.wait();
             }
@@ -2406,7 +2406,7 @@ fn main() -> Result<()> {
         );
     }
     println!(
-        "[gossip] {} chunk(s) from '{}' (max_words={}, voice={})",
+        "[lecturner] {} chunk(s) from '{}' (max_words={}, voice={})",
         chunks.len(), cfg.input.display(), cfg.max_words,
         cfg.crane_tts_voice,
     );
@@ -2423,9 +2423,9 @@ fn main() -> Result<()> {
     // ── 4. Load Whisper model (if validation enabled) ─────────────────────────
     let whisper_ctx: Option<WhisperContext> = if cfg.validate {
         let model_path = cfg.whisper_model_dir.join(&cfg.whisper_model);
-        println!("[gossip] Loading Whisper model: {}", model_path.display());
+        println!("[lecturner] Loading Whisper model: {}", model_path.display());
         let ctx = load_whisper_model(&model_path)?;
-        println!("[gossip] Whisper ready — validation threshold={:.3}", cfg.validate_threshold);
+        println!("[lecturner] Whisper ready — validation threshold={:.3}", cfg.validate_threshold);
         Some(ctx)
     } else {
         None
@@ -2466,7 +2466,7 @@ fn main() -> Result<()> {
             None                      => "→ end".to_string(),
         };
         println!(
-            "[gossip] [{ordinal}/{total}] {word_count}w {gap_label} → {wav_name}\n  \"{preview}{ellipsis}\""
+            "[lecturner] [{ordinal}/{total}] {word_count}w {gap_label} → {wav_name}\n  \"{preview}{ellipsis}\""
         );
 
         match synthesise_chunk(&client, &cfg, &chunk.text) {
@@ -2538,32 +2538,32 @@ fn main() -> Result<()> {
             &good_paths, &good_boundaries, &combined_path,
             cfg.sentence_gap_ms, cfg.paragraph_gap_ms,
         ) {
-            eprintln!("[gossip] Merge failed: {e:#}");
+            eprintln!("[lecturner] Merge failed: {e:#}");
         }
     } else if cfg.merge {
-        eprintln!("[gossip] Nothing to merge — all chunks failed.");
+        eprintln!("[lecturner] Nothing to merge — all chunks failed.");
     }
 
     // ── 7. MP3 transcode ───────────────────────────────────────────────────────
     if cfg.to_mp3 && cfg.merge && combined_path.exists() {
         match wav_to_mp3(&cfg.ffmpeg_bin, &combined_path) {
-            Ok(mp3_path) => println!("[gossip] MP3 written → {}", mp3_path.display()),
-            Err(e)       => eprintln!("[gossip] ffmpeg transcode failed: {e:#}"),
+            Ok(mp3_path) => println!("[lecturner] MP3 written → {}", mp3_path.display()),
+            Err(e)       => eprintln!("[lecturner] ffmpeg transcode failed: {e:#}"),
         }
     }
 
     // ── 8. Summary ─────────────────────────────────────────────────────────────
     println!(
-        "\n[gossip] Done. {} WAV(s) in '{}', {} failed, {} quarantined.",
+        "\n[lecturner] Done. {} WAV(s) in '{}', {} failed, {} quarantined.",
         good_paths.len(), cfg.out_dir.display(), n_skipped, n_quarantined,
     );
     if n_quarantined > 0 {
-        println!("[gossip] Run with --fix-quarantine to retry bad chunks, then --merge-only to rebuild.");
+        println!("[lecturner] Run with --fix-quarantine to retry bad chunks, then --merge-only to rebuild.");
     }
 
     // ── 9. Shut down server if we launched it ──────────────────────────────────
     if let Some(ref mut task) = server_task {
-        println!("[gossip] Stopping Crane TTS server (pid {})…", task.id());
+        println!("[lecturner] Stopping Crane TTS server (pid {})…", task.id());
         let _ = task.kill();
         let _ = task.wait();
     }
