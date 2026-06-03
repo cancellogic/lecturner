@@ -45,7 +45,8 @@ pip install pdfplumber
 
 ### Crane (LLM + TTS server)
 Lecturner uses [Crane](https://github.com/lucasjinreal/Crane) as its inference backend.
-Clone and build it yourself — Lecturner expects the `crane-oai` binary on disk.
+Clone and build it yourself (not mine to distribute) — Lecturner expects the `crane-oai` binary on disk.   
+I'm quite impressed with crane.
 
 ```bash
 git clone https://github.com/lucasjinreal/Crane
@@ -213,10 +214,14 @@ Lecturner is MIT licensed. The models it uses have their own licenses:
 Built with [Crane](https://github.com/lucasjinreal/Crane) by lucasjinreal —
 without Crane's Qwen3-TTS and Qwen3-4B inference this project would not exist.
 
-Pair programmed with Claude Sonnet (Anthropic).
+Pair programmed with Claude Sonnet (Anthropic)... 
 
+Crane and Claude got me through early days AI model python and c++ and fickle version/subversion dependency hell.  Some
+regret that python is still used to rip pdf text (sorry pdfplumber, you are a great program).  And regret for the 
+users that you need to break out grep curl hf and download the really important bits that make this program work.  
+Be sure to edit Lecturner.toml file paths to point at those important bits.   Cheers!
 ---
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see `LICENSE`.  And I love a good shout out.
