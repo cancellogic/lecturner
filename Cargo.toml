@@ -1,6 +1,6 @@
 [package]
 name        = "lecturner"
-version     = "0.1.0"
+version     = "0.2.0"
 edition     = "2021"
 description = "PDF and text to audiobook pipeline — rips, cleans, and speaks technical documents via local LLM + TTS models."
 license     = "MIT"
@@ -21,10 +21,10 @@ clap       = { version = "4",        features = ["derive"] }
 anyhow     = "1"
 toml       = "1"
 chrono     = { version = "0.4",      features = ["serde"] }
+pdfsink-rs = "0.2"   # pure-Rust PDF word-bbox extraction; replaces pdf_rip.py
 
 # ── Whisper validation ─────────────────────────────────────────────────────────
-# Platform feature flags — uncomment the one that matches your hardware.
-# Only one should be active at a time.
+# Platform feature flags — uncomment EXACTLY ONE line that matches your hardware.
 #
 # Windows / Linux with NVIDIA GPU (CUDA):
 whisper-rs = { version = "0.16", features = ["cuda"] }
