@@ -68,21 +68,16 @@ pub fn rip_pdf(pdf_path: &Path, out_path: &Path, cfg: &RipConfig) -> Result<()> 
     let doc = PdfDocument::open(pdf_path)
         .with_context(|| format!("Cannot open PDF: {}", pdf_path.display()))?;
 
-    // ── 2. Extract lines page-by-page ─────────────────────────────────────────
-    // Use pages() iterator — avoids needing a separate page_count() call and
-    // handles malformed page trees gracefully by skipping bad entries.
-    let mut all_lines: Vec<String> = Vec::new();
-    let mut page_num   = 0usize;
-    let mut page_count = 0usize;
-
-    // Collect pages first so we have a total count for progress messages.
-    let pages: Vec<_> = doc.pages().collect();
-    page_count = pages.len();
+    // pages() returns &[Page] — a slice with .len() and direct iteration.
+    let pages      = doc.pages();
+    let page_count = pages.len();
     println!("[pdf_rip] {} page(s) in {}", page_count, pdf_path.display());
 
-    for page in pages {
-        page_num += 1;
+    // ── 2. Extract lines page-by-page ─────────────────────────────────────────
+    let mut all_lines: Vec<String> = Vec::new();
 
+    for (page_idx, page) in pages.iter().enumerate() {
+        let page_num   = page_idx + 1;
         let page_width = page.width as f64;
 
         // pdfsink-rs Word fields: text, x0, x1, top, bottom — identical to
