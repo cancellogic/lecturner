@@ -34,17 +34,12 @@ ffmpeg_bin = "ffmpeg"      # "ffmpeg" if on PATH; otherwise full path e.g.
 skip_refs      = true      # drop References/Bibliography section
 skip_captions  = true      # drop figure/table caption lines
 
-# python_bin is used only for pdf_rip.py.  "python" works if Python 3 is on PATH.
-# On some systems you may need "python3" or a full path.
-# python_bin = "python"
-
 # ── Whisper validation ─────────────────────────────────────────────────────────
 validate           = true                # enable post-synthesis Whisper PER validation
 whisper_model      = "ggml-medium.en.bin"
 whisper_model_dir  = "models"            # directory containing the .bin file
 validate_threshold = 0.18               # max acceptable phoneme error rate (0.0–1.0)
                                         # 0.18 catches real glitches; homophones pass
-
 # Download the model with:
 #   mkdir models
 #   curl -L -o models/ggml-medium.en.bin \
@@ -55,20 +50,20 @@ validate_threshold = 0.18               # max acceptable phoneme error rate (0.0
 # via crane-oai.  Runs paragraph-by-paragraph before chunking.
 # Defaults to true when --rip-pdf is used, false otherwise.
 #
- llm_clean = true
+llm_clean = true
 
 # Path to the crane-oai binary.
 # Build Crane from source: https://github.com/lucasjinreal/Crane
 # Then set the path to the compiled binary:
 #
 # Windows:
-# crane_llm_bin = "C:\\path\\to\\Crane\\target\\release\\crane-oai.exe"
+crane_llm_bin = "Crane/target/release/crane-oai.exe"
 # macOS / Linux:
 # crane_llm_bin = "/path/to/Crane/target/release/crane-oai"
 
 # Path to your Qwen3-4B checkpoint directory.
 # Download with: hf download Qwen/Qwen3-4B --local-dir checkpoints/Qwen3-4B
-# crane_llm_model = "checkpoints/Qwen3-4B"
+crane_llm_model = "checkpoints/Qwen3-4B"
 
 crane_llm_port    = 8101   # separate port from TTS (8102)
 crane_llm_timeout = 60     # seconds to wait for crane-oai to load the model
@@ -77,7 +72,7 @@ crane_llm_timeout = 60     # seconds to wait for crane-oai to load the model
 # crane_tts_bin can be the same binary as crane_llm_bin — they run sequentially.
 #
 # Windows:
-# crane_tts_bin = "C:\\path\\to\\Crane\\target\\release\\crane-oai.exe"
+ crane_tts_bin = "Crane/target/release/crane-oai.exe"
 # macOS / Linux:
 # crane_tts_bin = "/path/to/Crane/target/release/crane-oai"
 
@@ -85,7 +80,7 @@ crane_llm_timeout = 60     # seconds to wait for crane-oai to load the model
 # Download with:
 #   hf download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
 #     --local-dir Qwen3-TTS-12Hz-1.7B-CustomVoice
-# crane_tts_model = "Qwen3-TTS-12Hz-1.7B-CustomVoice"
+crane_tts_model = "Qwen3-TTS-12Hz-1.7B-CustomVoice"
 
 crane_tts_port    = 8102   # separate port from LLM crane (8101)
 crane_tts_timeout = 60     # seconds to wait for crane-oai to load the TTS model
