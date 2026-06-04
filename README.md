@@ -1,6 +1,8 @@
 # Lecturner
 
-Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professional papers on your commute. Powered by Qwen3-TTS, Qwen3-4B, Whisper, pdfplumber, and ffmpeg via [lucasjinreal Crane](https://github.com/lucasjinreal/Crane).
+Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professional papers on your commute. Powered by Qwen3-TTS, Qwen3-4B, Whisper, and ffmpeg via [lucasjinreal Crane](https://github.com/lucasjinreal/Crane).
+
+Pure Rust. No Python. `cargo build --release` and you're done.
 
 ---
 
@@ -8,25 +10,33 @@ Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professiona
 
 Lecturner takes a PDF or text file and produces a narrated MP3, paragraph by paragraph:
 
-1. **Rip** — extract clean prose from a PDF via `pdf_rip.py` (pdfplumber), handling two-column layouts, dropping references and captions
+1. **Rip** — extract clean prose from a PDF in pure Rust, handling two-column layouts, dropping references and captions
 2. **Clean** — rewrite extracted prose for natural spoken delivery using Qwen3-4B via Crane
 3. **Speak** — synthesise each paragraph via Qwen3-TTS CustomVoice (Crane)
 4. **Validate** — transcribe each WAV with Whisper and check phoneme error rate; quarantine glitched chunks automatically
-5. **Batch** Drop a stack of PDFs in a folder and run overnight. Run (cargo run --release -- --batch-pdf papers   or w path: lecturner --batch papers   and then wake up with a playlist in directory at papers/audio. Yes, it is a little slow. Note that adding files to the batch after a batch has started results in ignored the new files until the next batch run.
+5. **Merge** — concatenate paragraph WAVs into a single MP3
+6. **Batch overnight** — Drop a stack of PDFs in a 'in' folder (say 'papers/in') and run:
+```bash
+lecturner --batch-pdf papers
+# or with explicit path:
+lecturner --batch-pdf /path/to/papers
+```
+Wake up with a playlist in `papers/audio/`. Note that files added to the batch directory after a run has started are ignored until the next run.
+files in the 'in' folder will be moved on completion.
+
 ---
 
 ## Quick Start
+
 **Before you begin you need**
 - **Windows**: MSVC build tools (Visual Studio Build Tools, C++ workload) + CUDA toolkit
 - **macOS**: `xcode-select --install`
 - **Linux**: `apt install build-essential libclang-dev` + CUDA toolkit if using GPU
 
 **1. Install system tools**
-- [Rust](https://rustup.rs)
-- [Python 3.8+](https://python.org)
+- [Rust](https://rustup.rs) (1.88 or later)
 - [ffmpeg](https://ffmpeg.org) on PATH
-- `pip install pdfplumber`
-- You may need clang for CUDA builds
+- You may need clang for CUDA/Metal builds
 
 **2. Build Crane** (the inference engine — not mine to distribute)
 ```bash
@@ -90,6 +100,7 @@ crane_tts_model = "Qwen3-TTS-12Hz-1.7B-CustomVoice"
 # Drop PDFs or text files into batch/in/ then:
 lecturner --batch-pdf batch
 ```
+
 ---
 
 ## Hardware requirements
@@ -174,9 +185,10 @@ Lecturner is MIT licensed. The models it uses have their own licenses:
 Built with [Crane](https://github.com/lucasjinreal/Crane) by lucasjinreal —
 without Crane's Qwen3-TTS and Qwen3-4B inference this project would not exist.
 
-Pair programmed with Claude Sonnet (Anthropic).
+PDF extraction uses [pdfsink-rs](https://github.com/clark-labs-inc/pdfsink-rs) —
+pure Rust, no specific Python runtime env required.  !Yes please!
 
-Crane and Claude got me through early-days AI model Python and clang and C++ and fickle version/subversion dependency hell. Some regret that Python is still used to rip PDF text (sorry pdfplumber, you are a great program). And regret for the users that you need to break out grep, curl, hf, and download the really important bits that make this program work. Be sure to edit `lecturner.toml` file paths to point at those important bits. Cheers!
+Pair programmed with Claude Sonnet (Anthropic).
 
 ---
 
