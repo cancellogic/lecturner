@@ -2,7 +2,7 @@
 
 Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professional papers on your commute. Powered by Qwen3-TTS, Qwen3-4B, Whisper, and ffmpeg via [lucasjinreal Crane](https://github.com/lucasjinreal/Crane).
 
-Pure Rust. No Python. `cargo build --release` and you're done... (provided you've downloaded and built crane for your os, downloaded the dictonary, the two qwen ai models and whisper and documented where those files landed in lecturner.toml... a one time hour long task.) 
+Pure Rust. Download the models, jot file locations in lecturner.toml and OS in cargo and build.  No Python. `cargo build --release` and you're done...
 
 ---
 
