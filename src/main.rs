@@ -15,6 +15,8 @@
 
 mod records;
 use records::{Boundary, ChunkRecord, ChunkStatus, RunRecord};
+mod pdf_rip;
+
 
 use std::{
     fs,
@@ -64,7 +66,7 @@ struct LecturnerConfig {
     sentence_gap_ms:      Option<u32>,
     paragraph_gap_ms:     Option<u32>,
     ffmpeg_bin:           Option<String>,
-    python_bin:           Option<String>,   // for pdf_rip.py (pdf_rip.py stays Python forever)
+
     rip_pdf:              Option<String>,
     skip_refs:            Option<bool>,
     skip_captions:        Option<bool>,
@@ -264,7 +266,6 @@ struct Config {
     sentence_gap_ms:      u32,
     paragraph_gap_ms:     u32,
     ffmpeg_bin:           PathBuf,
-    python_bin:           String,           // for pdf_rip.py (pdf_rip.py stays Python forever)
     rip_pdf:              Option<PathBuf>,
     rip_pdf_only:         bool,
     skip_refs:            bool,
@@ -335,8 +336,7 @@ fn resolve_config(cli: CliArgs, toml: LecturnerConfig) -> Config {
             .unwrap_or_else(|| PathBuf::from(
                 toml.ffmpeg_bin.unwrap_or_else(|| "ffmpeg".to_owned())
             )),
-        python_bin:  toml.python_bin.unwrap_or_else(|| "python".to_owned()),
-        rip_pdf:      cli.rip_pdf.or_else(|| toml.rip_pdf.map(PathBuf::from)),
+        rip_pdf: cli.rip_pdf.or_else(|| toml.rip_pdf.map(PathBuf::from)),    
         rip_pdf_only: cli.rip_pdf_only,
         skip_refs:    pick!(cli.skip_refs,    toml.skip_refs,    true),
         skip_captions: pick!(cli.skip_captions, toml.skip_captions, true),
@@ -1117,69 +1117,19 @@ fn validate_and_retry(
     }
 }
 
-// ─── PDF ripping ──────────────────────────────────────────────────────────────
-
-fn locate_pdf_rip_script(explicit: &Option<PathBuf>) -> Option<PathBuf> {
-    if let Some(p) = explicit { return Some(p.clone()); }
-    let name = "pdf_rip.py";
-    if let Ok(mut self_path) = std::env::current_exe() {
-        self_path.pop();
-        let candidate = self_path.join(name);
-        if candidate.exists() { return Some(candidate); }
-    }
-    let cwd_candidate = PathBuf::from(name);
-    if cwd_candidate.exists() { return Some(cwd_candidate); }
-    None
-}
-
-/// Run pdf_rip.py to extract prose from a PDF into the configured input text file.
-///
 /// Approach:
-///   1. Verify pdf_rip.py is locatable.
-///   2. Spawn Python with the script; capture stdout for progress lines.
-///   3. Detect exit code 1 = missing pdfplumber dep → print friendly install hint.
-///   4. Detect exit code 2 = extraction error → surface stderr.
-///   5. On success, lecturner's normal input file now contains the extracted prose.
+// ─── PDF ripping ──────────────────────────────────────────────────────────────
+/// Extract prose from a PDF into the configured input text file via the pdf_rip module.
 fn rip_pdf(cfg: &Config, pdf_path: &PathBuf) -> Result<()> {
-    let script = locate_pdf_rip_script(&None)
-        .context("Cannot find pdf_rip.py.  Put it next to lecturner.exe or in the working directory.")?;
-
-    let out_path = cfg.input.to_str().context("Non-UTF8 output path")?;
-    let pdf_str  = pdf_path.to_str().context("Non-UTF8 PDF path")?;
-
     println!("[lecturner] Ripping PDF: {} → {}", pdf_path.display(), cfg.input.display());
-
-    let mut cmd = Command::new(&cfg.python_bin);
-    cmd.arg(&script)
-       .arg("--input").arg(pdf_str)
-       .arg("--output").arg(out_path);
-
-    if !cfg.skip_refs     { cmd.arg("--no-skip-refs"); }
-    if !cfg.skip_captions { cmd.arg("--no-skip-captions"); }
-
-    let output = cmd.output()
-        .with_context(|| format!("Failed to spawn '{}'", cfg.python_bin))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() { println!("{line}"); }
-
-    match output.status.code() {
-        Some(0) => Ok(()),
-        Some(1) => {
-            if stdout.contains("GOSSIP_MISSING_DEP:pdfplumber") {
-                anyhow::bail!(
-                    "pdfplumber is not installed.  Fix:\n  {} -m pip install pdfplumber",
-                    cfg.python_bin
-                );
-            }
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("pdf_rip.py failed:\n{stderr}");
-        }
-        Some(2) | _ => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("pdf_rip.py extraction error:\n{stderr}");
-        }
-    }
+    pdf_rip::rip_pdf(
+        pdf_path,
+        &cfg.input,
+        &pdf_rip::RipConfig {
+            skip_refs:     cfg.skip_refs,
+            skip_captions: cfg.skip_captions,
+        },
+    )
 }
 
 // ─── LLM text cleanup (Track A-revised) ──────────────────────────────────────
@@ -1850,7 +1800,7 @@ fn collect_inbox_jobs(inbox: &PathBuf) -> Result<Vec<PathBuf>> {
 /// Run the full pipeline for one inbox job and return what happened.
 ///
 /// Approach — wraps the existing single-file pipeline end-to-end:
-///   1. Acquire raw text: PDF → rip via pdf_rip.py; TXT → read directly.
+///   1. Acquire raw text: PDF → rip via pdf_rip; TXT → read directly.
 ///   2. LLM cleanup pass → cleaned text written to text_completed/.
 ///   3. Chunk + synthesise into work_dir WAVs (per-job TTS server lifecycle).
 ///   4. Merge WAVs → work_dir/combined.wav → MP3 in audio/.
@@ -2060,37 +2010,15 @@ struct PartialConfig {
 /// rip_pdf variant that writes to an explicit output path (PartialConfig.input)
 /// rather than cfg.input, so batch jobs each get their own work directory.
 fn rip_pdf_to(cfg: &Config, pdf_path: &PathBuf, dest: &PartialConfig) -> Result<()> {
-    let script = locate_pdf_rip_script(&None)
-        .context("Cannot find pdf_rip.py.")?;
-    let out_path = dest.input.to_str().context("Non-UTF8 output path")?;
-    let pdf_str  = pdf_path.to_str().context("Non-UTF8 PDF path")?;
-
     println!("[batch] Ripping: {} → {}", pdf_path.display(), dest.input.display());
-
-    let mut cmd = Command::new(&cfg.python_bin);
-    cmd.arg(&script)
-       .arg("--input").arg(pdf_str)
-       .arg("--output").arg(out_path);
-    if !cfg.skip_refs     { cmd.arg("--no-skip-refs"); }
-    if !cfg.skip_captions { cmd.arg("--no-skip-captions"); }
-
-    let output = cmd.output()
-        .with_context(|| format!("Failed to spawn '{}'", cfg.python_bin))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() { println!("{line}"); }
-
-    match output.status.code() {
-        Some(0) => Ok(()),
-        Some(1) => {
-            if stdout.contains("GOSSIP_MISSING_DEP:pdfplumber") {
-                anyhow::bail!("pdfplumber not installed: {} -m pip install pdfplumber", cfg.python_bin);
-            }
-            anyhow::bail!("pdf_rip.py failed:
-{}", String::from_utf8_lossy(&output.stderr))
-        }
-        _ => anyhow::bail!("pdf_rip.py error:
-{}", String::from_utf8_lossy(&output.stderr)),
-    }
+    pdf_rip::rip_pdf(
+        pdf_path,
+        &dest.input,
+        &pdf_rip::RipConfig {
+            skip_refs:     cfg.skip_refs,
+            skip_captions: cfg.skip_captions,
+        },
+    )
 }
 
 /// llm_clean_text variant that writes the sidecar into work_dir instead of
