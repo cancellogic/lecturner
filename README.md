@@ -43,7 +43,7 @@ files in the 'in' folder will be moved on completion.
 git clone https://github.com/lucasjinreal/Crane
 cd Crane
 
-# Windows / Linux with CUDA:
+# Windows / Linux with CUDA:   from the developer command prompt 
 cargo build -p crane-oai --release --features cuda
 
 # macOS Apple Silicon (Metal):
