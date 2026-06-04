@@ -68,23 +68,22 @@ pub fn rip_pdf(pdf_path: &Path, out_path: &Path, cfg: &RipConfig) -> Result<()> 
     let doc = PdfDocument::open(pdf_path)
         .with_context(|| format!("Cannot open PDF: {}", pdf_path.display()))?;
 
-    let page_count = doc.page_count();
+    // ── 2. Extract lines page-by-page ─────────────────────────────────────────
+    // Use pages() iterator — avoids needing a separate page_count() call and
+    // handles malformed page trees gracefully by skipping bad entries.
+    let mut all_lines: Vec<String> = Vec::new();
+    let mut page_num   = 0usize;
+    let mut page_count = 0usize;
+
+    // Collect pages first so we have a total count for progress messages.
+    let pages: Vec<_> = doc.pages().collect();
+    page_count = pages.len();
     println!("[pdf_rip] {} page(s) in {}", page_count, pdf_path.display());
 
-    // ── 2. Extract lines page-by-page ─────────────────────────────────────────
-    let mut all_lines: Vec<String> = Vec::new();
+    for page in pages {
+        page_num += 1;
 
-    for page_num in 1..=page_count {
-        let page = match doc.page(page_num) {
-            Ok(p)  => p,
-            Err(e) => {
-                eprintln!("[pdf_rip] Warning: skipping page {page_num}: {e}");
-                all_lines.push(String::new());
-                continue;
-            }
-        };
-
-        let page_width = page.width() as f64;
+        let page_width = page.width as f64;
 
         // pdfsink-rs Word fields: text, x0, x1, top, bottom — identical to
         // the pdfplumber word dicts pdf_rip.py consumed.
