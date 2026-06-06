@@ -1,6 +1,6 @@
 # Lecturner
 
-Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professional papers on your commute. Powered by Qwen3-TTS, Qwen3-4B, Whisper, and ffmpeg via [lucasjinreal Crane](https://github.com/lucasjinreal/Crane).
+Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professional papers on your commute. Powered by Qwen3-TTS, Qwen3-4B, Whisper, pdfsink.rs and ffmpeg via [lucasjinreal Crane](https://github.com/lucasjinreal/Crane).
 
 Previously with python but now pure Rust. Download the models, jot file locations in lecturner.toml and OS in cargo and build.  No Python. `cargo build --release` and you're done...
 
