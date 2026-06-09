@@ -31,7 +31,8 @@ files in the 'in' folder will be moved on completion.
 **Before you begin you need**
 - **Windows**: MSVC build tools (Visual Studio Build Tools, C++ workload) + CUDA toolkit
 - **macOS**: `xcode-select --install`
-- **Linux**: `apt install build-essential libclang-dev` + CUDA toolkit if using GPU
+- **Linux**: `apt install build-essential libclang-dev` + CUDA toolkit if using GPU.
+ 
 Note that there are setup scripts for each os.  The linux version may work on Debian or Ubuntu.  With caution, I
 suggest you read through and try the setup_your_os script, and if they don't work for your specifics - do a manual install.
 
