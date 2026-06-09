@@ -33,15 +33,15 @@ files in the 'in' folder will be moved on completion.
 - **macOS**: `xcode-select --install`
 - **Linux**: `apt install build-essential libclang-dev` + CUDA toolkit if using GPU.
  
-Note that there are setup scripts for each os.  The linux version may work on Debian or Ubuntu.  With caution, I
-suggest you read through and try the setup_your_os script, and if they don't work for your specifics - do a manual install.
+Note that there are setup scripts for each os.  The linux version may work on Debian or Ubuntu or require manual install on other distros.  With caution, I
+suggest you read through and try the right setup_your_os script, and if they don't work for your specifics (and they may not) - do a manual install.
 
 **1. Install system tools**
 - [Rust](https://rustup.rs) (1.88 or later)
 - [ffmpeg](https://ffmpeg.org) on PATH
 - You may need clang for CUDA/Metal builds
 
-**2. Build Crane** (the inference engine — not mine to distribute)
+**2. Build Crane** (the inference engine — not mine to distribute and a likely source of requirements I may have missed by prior install)
 ```bash
 git clone https://github.com/lucasjinreal/Crane
 cd Crane
