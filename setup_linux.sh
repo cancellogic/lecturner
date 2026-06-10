@@ -33,6 +33,16 @@ ok()   { echo -e "${GREEN}[✓]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 die()  { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
 
+# Refuse to run as root.  Run as a normal user with sudo rights — the script
+# invokes sudo itself only for apt.  Under a root shell, rustup/cargo/pipx
+# would all install into /root instead of your home, and everything built or
+# downloaded would be root-owned.
+if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+    die "Don't run this as root/sudo — run as your normal user.
+    If you hit 'permission denied' launching the script, the execute bit
+    is missing:  chmod +x setup_linux.sh   (or run:  bash setup_linux.sh)"
+fi
+
 WORK_DIR="$(pwd)"
 
 # ── Step 1: System build requirements ────────────────────────────────────────

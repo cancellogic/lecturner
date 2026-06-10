@@ -32,6 +32,18 @@ ok()   { echo -e "${GREEN}[✓]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 die()  { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
 
+# Refuse to run as root.  rustup, cargo, and Homebrew are all per-user tools:
+# under sudo, rustup provisions a second toolchain into /var/root/.cargo (then
+# errors), downloads land root-owned, and Homebrew refuses root outright.
+# Nothing in this script needs elevation on macOS.
+if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+    die "Don't run this as root/sudo — everything here is user-level.
+    If you hit 'permission denied' launching the script, the execute bit
+    is missing:  chmod +x setup_mac.sh   (or run:  bash setup_mac.sh)
+    If a root shell already created /var/root/.rustup or /var/root/.cargo,
+    remove them:  sudo rm -rf /var/root/.rustup /var/root/.cargo"
+fi
+
 WORK_DIR="$(pwd)"
 
 # ── Step 1: System build requirements ────────────────────────────────────────
