@@ -46,6 +46,9 @@ suggest you read through and try the right setup_your_os script, and if they don
 **1. Install system tools**
 - [Rust](https://rustup.rs) (1.88 or later)
 - [ffmpeg](https://ffmpeg.org) on PATH
+- [CMake](https://cmake.org) on PATH — whisper-rs compiles whisper.cpp from
+  source at build time (brew/apt/winget all carry it; the VS Build Tools C++
+  workload bundles it on Windows but only inside a Developer Command Prompt)
 - You may need clang for CUDA/Metal builds
 
 **2. Build Crane** (the inference engine — not mine to distribute and a likely source of requirements I may have missed by prior install)

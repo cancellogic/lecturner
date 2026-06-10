@@ -2,7 +2,8 @@
 # setup_windows.ps1 — Windows bootstrap for Crane + lecturner
 #
 # ROADMAP:
-#   1. Check system build requirements (MSVC build tools, git, ffmpeg, clang/
+#   1. Check system build requirements (MSVC build tools, git, ffmpeg, cmake,
+#      clang/
 #      LLVM, Rust, hf CLI); detect CUDA toolkit; warn if not in Dev Prompt
 #   2. Ask user: CUDA or CPU  (Metal is Apple-only)
 #   3. Download model assets:
@@ -99,6 +100,18 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
                 [System.Environment]::GetEnvironmentVariable("PATH","User")
 }
 Write-Ok "ffmpeg: $(ffmpeg -version 2>&1 | Select-Object -First 1)"
+
+# cmake — whisper-rs-sys compiles whisper.cpp from source at build time and
+# its build system is CMake.  The VS Build Tools C++ workload can bundle
+# CMake, but it is only on PATH inside a Developer Command Prompt — checking
+# here makes the lecturner build work from any shell.
+if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+    Write-Warn "cmake not found — installing via winget…"
+    winget install --id Kitware.CMake -e --source winget
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("PATH", "User")
+}
+Write-Ok "cmake: $(cmake --version 2>&1 | Select-Object -First 1)"
 
 # clang/LLVM — whisper-rs bindgen calls clang directly for CUDA builds
 if (-not (Get-Command clang -ErrorAction SilentlyContinue)) {

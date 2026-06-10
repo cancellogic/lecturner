@@ -4,7 +4,7 @@
 #
 # ROADMAP:
 #   1. Check system build requirements (Xcode CLT, clang, Homebrew, Rust,
-#      ffmpeg, hf CLI)
+#      ffmpeg, cmake, hf CLI)
 #   2. Ask user: Apple Metal or CPU  (CUDA not available on macOS)
 #   3. Download model assets:
 #        - Qwen3-4B            → checkpoints/Qwen3-4B/
@@ -82,6 +82,15 @@ if ! command -v ffmpeg &>/dev/null; then
     brew install ffmpeg
 fi
 ok "ffmpeg: $(ffmpeg -version 2>&1 | head -1)"
+
+# cmake — whisper-rs-sys compiles whisper.cpp from source at build time and
+# its build system is CMake.  Only lecturner needs this (Crane/candle is
+# pure Rust), so without the check it fails at the very LAST build step.
+if ! command -v cmake &>/dev/null; then
+    warn "cmake not found — installing via Homebrew…"
+    brew install cmake
+fi
+ok "cmake: $(cmake --version | head -1)"
 
 # Rust 1.88+ required per lecturner README
 if command -v rustup &>/dev/null; then

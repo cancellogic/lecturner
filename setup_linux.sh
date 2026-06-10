@@ -4,7 +4,7 @@
 #
 # ROADMAP:
 #   1. Check system build requirements (build-essential, libclang-dev, clang,
-#      ffmpeg, Rust, hf CLI); probe nvcc.  apt-only — dies with a pointer to
+#      ffmpeg, cmake, Rust, hf CLI); probe nvcc.  apt-only — dies with a pointer to
 #      the README's manual steps on other distros (per README: Debian/Ubuntu
 #      or manual install)
 #   2. Ask user: CUDA or CPU  (Metal is Apple-only)
@@ -60,15 +60,17 @@ if ! command -v apt-get &>/dev/null; then
     For other distros, install manually (see README 'Quick Start'):
       build tools + libclang  (Fedora: gcc gcc-c++ make clang-devel;
                                Arch: base-devel clang)
-      ffmpeg, git, curl, Rust 1.88+, and the 'hf' CLI (pipx install huggingface_hub)"
+      cmake (whisper-rs builds whisper.cpp with it), ffmpeg, git, curl,
+      Rust 1.88+, and the 'hf' CLI (pipx install huggingface_hub)"
 fi
 PKG_INSTALL="sudo apt-get install -y"
 PKG_UPDATE="sudo apt-get update -qq"
 
 # lecturner README specifies: apt install build-essential libclang-dev
-# libclang-dev is required by whisper-rs bindgen.
+# libclang-dev is required by whisper-rs bindgen; cmake is required because
+# whisper-rs-sys compiles whisper.cpp from source at build time.
 NEED_UPDATE=false
-for tool in git curl gcc; do
+for tool in git curl gcc cmake; do
     if ! command -v "$tool" &>/dev/null; then
         warn "Missing: $tool"
         NEED_UPDATE=true
@@ -80,7 +82,7 @@ if ! dpkg -s libclang-dev &>/dev/null 2>&1; then
 fi
 if $NEED_UPDATE; then
     $PKG_UPDATE
-    $PKG_INSTALL build-essential libclang-dev git curl
+    $PKG_INSTALL build-essential libclang-dev git curl cmake
 fi
 ok "Core build tools present"
 
