@@ -83,6 +83,8 @@ curl -L -o models/ggml-medium.en.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
 
 # CMU Pronouncing Dictionary (phoneme validation)
+# NB: this file is embedded into the lecturner binary at COMPILE time —
+# step 4 copies it into the lecturner repo root before building.
 curl -L -o cmudict.dict \
   https://raw.githubusercontent.com/cmusphinx/cmudict/master/cmudict.dict
 ```
@@ -94,6 +96,7 @@ Backend selection is a cargo feature — same flag shape as the Crane build, no 
 ```bash
 git clone https://github.com/cancellogic/lecturner
 cd lecturner
+cp ../cmudict.dict .   # required BEFORE building — embedded via include_str!
 
 # Windows / Linux with CUDA:
 cargo build --release --features cuda

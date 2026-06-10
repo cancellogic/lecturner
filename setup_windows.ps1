@@ -10,7 +10,8 @@
 #        - Qwen3-4B            → checkpoints\Qwen3-4B\
 #        - Qwen3-TTS CustomVoice → Qwen3-TTS-12Hz-1.7B-CustomVoice\
 #        - Whisper ggml binary  → models\ggml-medium.en.bin
-#        - CMU dict             → cmudict.dict  (root of work dir)
+#        - CMU dict             → cmudict.dict  (work dir; copied into
+#          the lecturner repo root in Step 5 — compile-time embed)
 #   4. Clone + build lucasjinreal/Crane with the chosen feature flag
 #      CUDA builds REQUIRE the x64 Native Tools Command Prompt for VS;
 #      script warns but proceeds — build will fail cleanly if env is wrong.
@@ -291,6 +292,15 @@ if (-not (Test-Path "$LecturnerDir\.git")) {
 # Backend selection is a cargo feature (cuda / none = CPU) — the same flag we
 # just passed to Crane.  No Cargo.toml patching, so the repo stays clean and
 # the pull above never hits a dirty-tree conflict on re-runs.
+# cmudict.dict is embedded into the binary at COMPILE time via
+# include_str!("../cmudict.dict") in src/main.rs — it must sit in the
+# LECTURNER REPO ROOT before cargo runs.  Step 3 downloaded it to the
+# work dir; fresh clones lack it.
+if (-not (Test-Path "$LecturnerDir\cmudict.dict")) {
+    Copy-Item $CmuDict "$LecturnerDir\cmudict.dict"
+    Write-Ok "cmudict.dict → lecturner repo root (compile-time embed)"
+}
+
 $CargoToml = "$LecturnerDir\Cargo.toml"
 $LectArgs  = @("build", "--manifest-path", $CargoToml, "--release")
 if ($CraneFeature) { $LectArgs += @("--features", $CraneFeature) }

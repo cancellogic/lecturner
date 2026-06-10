@@ -12,7 +12,8 @@
 #        - Qwen3-4B            → checkpoints/Qwen3-4B/
 #        - Qwen3-TTS CustomVoice → Qwen3-TTS-12Hz-1.7B-CustomVoice/
 #        - Whisper ggml binary  → models/ggml-medium.en.bin
-#        - CMU dict             → cmudict.dict  (root of work dir)
+#        - CMU dict             → cmudict.dict  (work dir; copied into
+#          the lecturner repo root in Step 5 — compile-time embed)
 #   4. Clone + build lucasjinreal/Crane with the chosen feature flag
 #      (CUDA builds need nvcc and the CUDA headers reachable — put
 #       /usr/local/cuda/bin on PATH first if the build can't find them)
@@ -266,6 +267,15 @@ if [[ ! -d "$LECTURNER_DIR/.git" ]]; then
 else
     ok "lecturner repo already present — pulling latest…"
     git -C "$LECTURNER_DIR" pull --ff-only
+fi
+
+# cmudict.dict is embedded into the binary at COMPILE time via
+# include_str!("../cmudict.dict") in src/main.rs — resolved relative to the
+# source file, so the dict must sit in the LECTURNER REPO ROOT before cargo
+# runs.  Step 3 downloaded it to the work dir; fresh clones lack it.
+if [[ ! -f "$LECTURNER_DIR/cmudict.dict" ]]; then
+    cp "$CMUDICT" "$LECTURNER_DIR/cmudict.dict"
+    ok "cmudict.dict → lecturner repo root (compile-time embed)"
 fi
 
 # Backend selection is a cargo feature (cuda / metal / none = CPU) — same
