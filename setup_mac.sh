@@ -12,11 +12,15 @@
 #        - Whisper ggml binary  → models/ggml-medium.en.bin
 #        - CMU dict             → cmudict.dict  (root of work dir)
 #   4. Clone + build lucasjinreal/Crane with the chosen feature flag
-#   5. Clone lecturner, patch Cargo.toml whisper-rs line to match platform,
-#      build, then write lecturner.toml with absolute paths
+#   5. Clone + build lecturner with the SAME feature flag.  Cargo features
+#      replaced the old comment-out-the-right-line Cargo.toml patching, so
+#      the repo stays clean and re-runs can git pull without conflict.
+#   6. Write lecturner.toml with absolute paths
 #
 # Run from the directory you want everything installed into.
 # Requires macOS 12+.
+# Line endings must stay LF — add `*.sh text eol=lf` to .gitattributes;
+# CRLF here breaks bash with "syntax error near unexpected token".
 # =============================================================================
 
 set -euo pipefail
@@ -103,15 +107,14 @@ if [[ "$ARCH" == "arm64" ]]; then
     read -rp "Enter choice [1-2] (default: 1): " BACKEND_CHOICE
     BACKEND_CHOICE=${BACKEND_CHOICE:-1}
     case "$BACKEND_CHOICE" in
-        1) CRANE_FEATURE="metal"; WHISPER_FEATURE="metal"; BACKEND_LABEL="Apple Metal" ;;
-        2) CRANE_FEATURE="";      WHISPER_FEATURE="cpu";   BACKEND_LABEL="CPU" ;;
+        1) BACKEND_FEATURE="metal"; BACKEND_LABEL="Apple Metal" ;;
+        2) BACKEND_FEATURE="";      BACKEND_LABEL="CPU" ;;
         *) warn "Unrecognised — defaulting to Metal."
-           CRANE_FEATURE="metal"; WHISPER_FEATURE="metal"; BACKEND_LABEL="Apple Metal" ;;
+           BACKEND_FEATURE="metal"; BACKEND_LABEL="Apple Metal" ;;
     esac
 else
     warn "Intel Mac — Metal not supported; using CPU."
-    CRANE_FEATURE=""
-    WHISPER_FEATURE="cpu"
+    BACKEND_FEATURE=""
     BACKEND_LABEL="CPU"
 fi
 ok "Selected backend: $BACKEND_LABEL"
@@ -184,12 +187,12 @@ else
     git -C "$CRANE_DIR" pull --ff-only
 fi
 
-echo "Building crane-oai [feature: ${CRANE_FEATURE:-'(none — CPU)'}]…"
-if [[ -n "$CRANE_FEATURE" ]]; then
+echo "Building crane-oai [feature: ${BACKEND_FEATURE:-'(none — CPU)'}]…"
+if [[ -n "$BACKEND_FEATURE" ]]; then
     cargo build \
         --manifest-path "$CRANE_DIR/Cargo.toml" \
         -p crane-oai --release \
-        --features "$CRANE_FEATURE"
+        --features "$BACKEND_FEATURE"
 else
     cargo build \
         --manifest-path "$CRANE_DIR/Cargo.toml" \
@@ -199,7 +202,7 @@ fi
 CRANE_BIN="$CRANE_DIR/target/release/crane-oai"
 ok "Crane built → $CRANE_BIN"
 
-# ── Step 5: Clone + patch + build lecturner ───────────────────────────────────
+# ── Step 5: Clone + build lecturner ───────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " Step 5 — Building lecturner"
@@ -213,52 +216,21 @@ else
     git -C "$LECTURNER_DIR" pull --ff-only
 fi
 
-# Patch Cargo.toml whisper-rs feature line.
-#
-# The Cargo.toml ships with ONE line active (cuda by default) and the
-# other two commented.  We need to:
-#   1. Comment out whichever line is currently active.
-#   2. Uncomment the line matching our platform.
-#
-# Line shapes (from the real Cargo.toml):
-#   whisper-rs = { version = "0.16", features = ["cuda"] }
-#   # whisper-rs = { version = "0.16", features = ["metal"] }
-#   # whisper-rs = { version = "0.16" }          ← cpu (no features key)
-#
-# Strategy: comment all three, then uncomment the right one.
-# A .bak is kept for manual inspection.
-
+# Backend selection is a cargo feature (metal / none = CPU) — same flag we
+# just passed to Crane.  No Cargo.toml patching, so the repo stays clean and
+# the pull above never hits a dirty-tree conflict on re-runs.
 CARGO_TOML="$LECTURNER_DIR/Cargo.toml"
-cp "$CARGO_TOML" "$CARGO_TOML.bak"
-echo "Patching $CARGO_TOML for backend: $BACKEND_LABEL…"
-
-# Step A — comment every whisper-rs line (idempotent on re-run)
-sed -i '' \
-    -e 's|^whisper-rs |# whisper-rs |' \
-    "$CARGO_TOML"
-
-# Step B — uncomment the right one
-case "$WHISPER_FEATURE" in
-    metal)
-        # Line: # whisper-rs = { version = "0.16", features = ["metal"] }
-        sed -i '' \
-            's|^# \(whisper-rs = { version = "0.16", features = \["metal"\].*\)|\1|' \
-            "$CARGO_TOML"
-        ;;
-    cpu)
-        # CPU line has NO features key: # whisper-rs = { version = "0.16" }
-        # Use a more targeted anchor to avoid matching cuda/metal lines
-        sed -i '' \
-            's|^# \(whisper-rs = { version = "0.16" }\)|\1|' \
-            "$CARGO_TOML"
-        ;;
-esac
-ok "Cargo.toml patched — active whisper-rs line:"
-grep '^whisper-rs' "$CARGO_TOML" || warn "  No active whisper-rs line found — check $CARGO_TOML manually"
-
-cargo build \
-    --manifest-path "$CARGO_TOML" \
-    --release
+echo "Building lecturner [feature: ${BACKEND_FEATURE:-'(none — CPU)'}]…"
+if [[ -n "$BACKEND_FEATURE" ]]; then
+    cargo build \
+        --manifest-path "$CARGO_TOML" \
+        --release \
+        --features "$BACKEND_FEATURE"
+else
+    cargo build \
+        --manifest-path "$CARGO_TOML" \
+        --release
+fi
 
 LECTURNER_BIN="$LECTURNER_DIR/target/release/lecturner"
 ok "lecturner built → $LECTURNER_BIN"

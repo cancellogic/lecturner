@@ -155,7 +155,7 @@ MODES
                                 hamlet_picturebook.txt  (no audio produced)
       batch\\text_completed\\   rosencrantz_guildenstern.txt
       batch\\pdf_completed\\    processed input files
-      batch\\pdf_errored\\      failed input files (2 strikes = skipped)
+      batch\\pdf_errored\\      failed input files (2 crash-interrupted attempts = quarantined here)
     Omit the path to use a 'batch' directory next to the binary.
 
   Repair quarantined chunks
@@ -1716,8 +1716,9 @@ enum JobOutcome {
 
 /// One line appended to batch.log per event.  JSONL — one object per line.
 ///
-/// Design: minimal fields, human-readable, enough for lecturner to count failures
-/// per filename across a crash-interrupted run.
+/// Design: minimal fields, human-readable, enough for lecturner to detect
+/// crash-interrupted attempts per filename (a "start" with no "complete" or
+/// "fail") when resuming after the process died mid-batch.
 #[derive(Serialize, Deserialize, Debug)]
 struct BatchLogEntry {
     ts:      String,
@@ -1753,19 +1754,35 @@ impl BatchLog {
         Ok(())
     }
 
-    /// Count "fail" events per PDF filename across all existing log entries.
-    /// Missing or unreadable log = no prior failures.
-    fn failure_counts(&self) -> std::collections::HashMap<String, usize> {
-        let mut counts = std::collections::HashMap::new();
-        let Ok(raw) = fs::read_to_string(&self.path) else { return counts; };
+    /// Count interrupted attempts per filename: "start" events with no
+    /// matching terminal event ("complete" or "fail").
+    ///
+    /// Approach — why dangling starts and not fail events:
+    ///   A logged "fail" always coincides with the file being moved out of
+    ///   the inbox, so it can never be retried and never needs skipping.
+    ///   The dangerous case is a poison input that CRASHES or hangs the
+    ///   process: that logs "start" and nothing else, and the file is still
+    ///   sitting in the inbox on restart.  starts − terminals is exactly
+    ///   that signature.  Missing or unreadable log = no prior strikes.
+    fn strike_counts(&self) -> std::collections::HashMap<String, usize> {
+        let mut starts:    std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut terminals: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let Ok(raw) = fs::read_to_string(&self.path) else { return starts; };
         for line in raw.lines() {
             if let Ok(entry) = serde_json::from_str::<BatchLogEntry>(line) {
-                if entry.event == "fail" {
-                    *counts.entry(entry.pdf).or_insert(0) += 1;
+                match entry.event.as_str() {
+                    "start"             => *starts.entry(entry.pdf).or_insert(0) += 1,
+                    "complete" | "fail" => *terminals.entry(entry.pdf).or_insert(0) += 1,
+                    _                   => {}
                 }
             }
         }
-        counts
+        for (pdf, n_term) in terminals {
+            if let Some(n_start) = starts.get_mut(&pdf) {
+                *n_start = n_start.saturating_sub(n_term);
+            }
+        }
+        starts
     }
 
     /// Wipe the log file.  Called when the batch loop exits cleanly.
@@ -2119,9 +2136,11 @@ impl BatchDirs {
 ///
 /// Approach:
 ///   1. Create subdirectory tree under batch_root.
-///   2. Open (or resume) batch.log and tally prior failure counts.
+///   2. Open (or resume) batch.log and tally prior strike counts
+///      (interrupted attempts: "start" events with no terminal event).
 ///   3. For each PDF in inbox/ (alphabetical):
-///        a. Skip if failure_count >= 2 (double-fail rule).
+///        a. If strikes >= 2 (crashed/hung twice): move to pdf_errored/,
+///           log "fail", continue — never re-attempt a poison input.
 ///        b. Log "start".
 ///        c. Run run_single_job() — catches its own panics via Result.
 ///        d. On Clean or Part: move PDF to pdf_completed/, log "complete".
@@ -2135,7 +2154,7 @@ fn run_batch(batch_root: PathBuf, cfg: &Config, wstate: &mut Option<WhisperState
         .build()
         .context("Failed to build HTTP client")?;
 
-    let prior_failures = log.failure_counts();
+    let prior_strikes = log.strike_counts();
 
     let jobs = collect_inbox_jobs(&dirs.inbox)?;
     if jobs.is_empty() {
@@ -2152,10 +2171,23 @@ fn run_batch(batch_root: PathBuf, cfg: &Config, wstate: &mut Option<WhisperState
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "unknown".to_owned());
 
-        // ── Double-fail skip ───────────────────────────────────────────────────
-        let prior = *prior_failures.get(&filename).unwrap_or(&0);
+        // ── Double-strike quarantine ───────────────────────────────────────────
+        // Two interrupted attempts (crash/hang mid-job) = poison input.
+        // Move it to errored/ rather than merely skipping: the log is wiped
+        // on clean exit, so a skipped file left in the inbox would get fresh
+        // strikes next session and resume the crash loop.
+        let prior = *prior_strikes.get(&filename).unwrap_or(&0);
         if prior >= 2 {
-            println!("[batch] Skipping '{filename}' — {prior} prior failures in this session.");
+            let dest = dirs.pdf_errored.join(&filename);
+            if let Err(e) = fs::rename(&job_path, &dest) {
+                eprintln!("[batch] Could not move struck-out '{filename}' to errored/: {e}");
+            }
+            let _ = log.append(&BatchLogEntry {
+                ts: ts(), pdf: filename.clone(), event: "fail".into(),
+                outcome: None, mp3: None,
+                reason: Some(format!("{prior} interrupted attempts — likely crashes the pipeline")),
+            });
+            eprintln!("[batch] ✗ '{filename}' → errored/ [{prior} interrupted attempts this session]");
             continue;
         }
 

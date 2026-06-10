@@ -2,7 +2,7 @@
 
 Turns PDFs and text files into narrated MP3 audiobooks. Keep up with professional papers on your commute. Powered by Qwen3-TTS, Qwen3-4B, Whisper, pdfsink.rs and ffmpeg via [lucasjinreal Crane](https://github.com/lucasjinreal/Crane).
 
-Previously with python but now pure Rust. Download the models, jot file locations in lecturner.toml and OS in cargo and build.  No Python. `cargo build --release` and you're done...
+Previously with python but now pure Rust. Download the models, jot file locations in lecturner.toml, and build with the cargo feature matching your hardware (`--features cuda`, `--features metal`, or nothing for CPU). No Python. `cargo build --release --features cuda` and you're done...
 
 ---
 
@@ -33,8 +33,15 @@ files in the 'in' folder will be moved on completion.
 - **macOS**: `xcode-select --install`
 - **Linux**: `apt install build-essential libclang-dev` + CUDA toolkit if using GPU.
  
-Note that there are setup scripts for each os.  The linux version may work on Debian or Ubuntu or require manual install on other distros.  With caution, I
+Note that there are setup scripts for each os.  The linux version supports Debian/Ubuntu (it exits with manual-install pointers on other distros).  With caution, I
 suggest you read through and try the right setup_your_os script, and if they don't work for your specifics (and they may not) - do a manual install.
+
+<!-- TODO: a single cross-platform setup tool should exist as a small Rust
+     crate in this workspace (`cargo run -p setup`) — one source, testable,
+     cfg-gated OS handling.  Considered 2026-06 and deliberately deferred:
+     after the cargo-features change the three scripts share only ~150 lines
+     of boilerplate, below the threshold that justifies a fourth build
+     artifact.  Revisit if toml keys / model names churn twice more. -->
 
 **1. Install system tools**
 - [Rust](https://rustup.rs) (1.88 or later)
@@ -77,11 +84,19 @@ curl -L -o cmudict.dict \
 
 **4. Build Lecturner**
 
-Edit `Cargo.toml` first — uncomment the `whisper-rs` line that matches your platform (CUDA / Metal / CPU), then:
+Backend selection is a cargo feature — same flag shape as the Crane build, no file editing:
 
 ```bash
 git clone https://github.com/cancellogic/lecturner
 cd lecturner
+
+# Windows / Linux with CUDA:
+cargo build --release --features cuda
+
+# macOS Apple Silicon (Metal):
+cargo build --release --features metal
+
+# CPU only:
 cargo build --release
 ```
 

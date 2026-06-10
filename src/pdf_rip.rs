@@ -26,7 +26,8 @@
 //!      before the LLM sees the text — saves tokens, reduces hallucination risk.
 //!   8. Drop page numbers, noise lines (short / ALL-CAPS / URLs / bare DOIs).
 //!   9. Drop figure/table caption lines (optional).
-//!  10. Stop at References / Bibliography / Acknowledgements heading (optional).
+//!  10. Stop at References / Bibliography / Acknowledgements / Appendix
+//!      heading, including numbered forms like "7. References" (optional).
 //!  11. Collapse contiguous non-blank lines into paragraphs.
 
 use anyhow::{Context, Result};
@@ -415,15 +416,36 @@ fn is_noise(line: &str) -> bool {
 }
 
 /// Headings that signal "drop everything below here."
+///
+/// Approach — normalize, strip section enumeration, exact-match:
+///   1. Lowercase + trim; reject anything over 40 chars (headings are short —
+///      this is the guard against prose like "References to prior work are…",
+///      which exact-matching alone wouldn't need, but `appendix` uses a
+///      starts_with test and the cap keeps that honest too).
+///   2. Strip leading enumeration: digits, dots, spaces, parens — catches
+///      "7. References", "7 References", "(7) References".  Roman-numeral
+///      enumeration ("VII. References") is NOT handled — rare in papers that
+///      use these heading words, revisit if one shows up in the wild.
+///   3. Exact-match the known heading set; `appendix` alone uses starts_with
+///      so "Appendix A: Derivations" also terminates extraction.
 fn is_refs_heading(line: &str) -> bool {
+    let s = line.trim().to_ascii_lowercase();
+    if s.is_empty() || s.len() > 40 {
+        return false;
+    }
+    let body = s.trim_start_matches(|c: char| {
+        c.is_ascii_digit() || matches!(c, '.' | ' ' | '(' | ')')
+    });
     matches!(
-        line.trim().to_ascii_lowercase().as_str(),
+        body,
         "references"
+        | "references and notes"
         | "bibliography"
+        | "works cited"
+        | "literature cited"
         | "acknowledgements"
         | "acknowledgments"
-        | "appendix"
-    )
+    ) || body.starts_with("appendix")
 }
 
 /// Figure/table caption starters.
@@ -521,7 +543,12 @@ mod tests {
 
     #[test]
     fn glyph_ligatures_restored() {
-        assert_eq!(scrub_glyph_artifacts("e[fi]cient"), "efficient");
+        // NB: the ligature token replaces ONLY the glyphs it fuses — the
+        // realistic artifact for "efficient" with an fi ligature is
+        // "ef[fi]cient" (bare f survives outside the token).  The original
+        // fixture "e[fi]cient" expected two f's from an input containing one.
+        assert_eq!(scrub_glyph_artifacts("ef[fi]cient"), "efficient");
+        assert_eq!(scrub_glyph_artifacts("e[ffi]cient"), "efficient");
         assert_eq!(scrub_glyph_artifacts("o[ff]set"),   "offset");
     }
 
@@ -555,6 +582,23 @@ mod tests {
         assert!(is_refs_heading("REFERENCES"));
         assert!(is_refs_heading("  bibliography  "));
         assert!(!is_refs_heading("Reference architecture"));
+    }
+
+    #[test]
+    fn refs_heading_numbered_and_variant_forms() {
+        assert!(is_refs_heading("7. References"));
+        assert!(is_refs_heading("7 References"));
+        assert!(is_refs_heading("(7) References"));
+        assert!(is_refs_heading("REFERENCES AND NOTES"));
+        assert!(is_refs_heading("Works Cited"));
+        assert!(is_refs_heading("Appendix A: Derivations"));
+        // Prose that merely starts with a heading word must not terminate
+        // extraction — the 40-char cap is the guard.
+        assert!(!is_refs_heading(
+            "References to prior work on station-keeping are collected below."
+        ));
+        // Bare enumeration with no heading word.
+        assert!(!is_refs_heading("7."));
     }
 
     #[test]

@@ -13,13 +13,19 @@
 #   4. Clone + build lucasjinreal/Crane with the chosen feature flag
 #      CUDA builds REQUIRE the x64 Native Tools Command Prompt for VS;
 #      script warns but proceeds — build will fail cleanly if env is wrong.
-#   5. Clone lecturner, patch Cargo.toml whisper-rs line, build, write toml
-#      Windows paths in toml use forward slashes (TOML-safe, Rust accepts them)
+#   5. Clone + build lecturner with the SAME feature flag.  Cargo features
+#      replaced the old Cargo.toml whisper-rs line patching, so the repo
+#      stays clean and re-runs can git pull without conflict.
+#   6. Write lecturner.toml.  Paths use forward slashes (TOML-safe, and
+#      Rust's Path accepts them on Windows).
 #
 # Run in PowerShell 7+ as Administrator from your install directory.
 # =============================================================================
 
 #Requires -Version 7.0
+# ^ Load-bearing beyond the obvious: PS7's `Set-Content -Encoding UTF8` writes
+#   UTF-8 *without* a BOM.  Under PS 5.1 the same line writes a BOM, which the
+#   toml parser rejects — so this guard is what keeps Step 6's output valid.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -71,6 +77,12 @@ if (-not $env:VCINSTALLDIR) {
 }
 
 # git
+# NB on the PATH refresh pattern used after each winget install below: it
+# REPLACES the session PATH from the registry, discarding session-only
+# additions.  It works here because every installer we invoke (winget
+# packages, rustup-init) writes its PATH entry to the registry — but if you
+# add a session-only `$env:PATH +=` above one of these refreshes, it will be
+# silently lost.  Appending instead of replacing would be more robust.
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Warn "git not found — installing via winget…"
     winget install --id Git.Git -e --source winget
@@ -156,11 +168,11 @@ if ($CudaAvailable) {
 }
 
 switch ($BackendChoice) {
-    "1" { $CraneFeature = "cuda"; $WhisperFeature = "cuda"; $BackendLabel = "CUDA" }
-    "2" { $CraneFeature = "";     $WhisperFeature = "cpu";  $BackendLabel = "CPU"  }
+    "1" { $CraneFeature = "cuda"; $BackendLabel = "CUDA" }
+    "2" { $CraneFeature = "";     $BackendLabel = "CPU"  }
     default {
         Write-Warn "Unrecognised — defaulting to CPU."
-        $CraneFeature = ""; $WhisperFeature = "cpu"; $BackendLabel = "CPU"
+        $CraneFeature = ""; $BackendLabel = "CPU"
     }
 }
 Write-Ok "Selected backend: $BackendLabel"
@@ -249,7 +261,7 @@ Write-Host "Building crane-oai [feature: $(if ($CraneFeature) { $CraneFeature } 
 $CraneBin = "$CraneDir\target\release\crane-oai.exe"
 Write-Ok "Crane built → $CraneBin"
 
-# ── Step 5: Clone + patch + build lecturner ───────────────────────────────────
+# ── Step 5: Clone + build lecturner ───────────────────────────────────────────
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 Write-Host " Step 5 — Building lecturner"
@@ -263,55 +275,14 @@ if (-not (Test-Path "$LecturnerDir\.git")) {
     git -C $LecturnerDir pull --ff-only
 }
 
-# Patch Cargo.toml whisper-rs feature line.
-#
-# Ships with cuda active, metal and cpu commented:
-#   whisper-rs = { version = "0.16", features = ["cuda"] }
-#   # whisper-rs = { version = "0.16", features = ["metal"] }
-#   # whisper-rs = { version = "0.16" }
-#
-# Strategy: comment every whisper-rs line, then uncomment the right one.
-# A .bak is kept for manual inspection.
-
+# Backend selection is a cargo feature (cuda / none = CPU) — the same flag we
+# just passed to Crane.  No Cargo.toml patching, so the repo stays clean and
+# the pull above never hits a dirty-tree conflict on re-runs.
 $CargoToml = "$LecturnerDir\Cargo.toml"
-Copy-Item $CargoToml "$CargoToml.bak" -Force
-Write-Host "Patching $CargoToml for backend: $BackendLabel…"
-
-$TomlLines = Get-Content $CargoToml
-
-# Step A — comment every active whisper-rs line
-$TomlLines = $TomlLines | ForEach-Object {
-    if ($_ -match '^whisper-rs ') { "# $_" } else { $_ }
-}
-
-# Step B — uncomment the right one
-$TomlLines = $TomlLines | ForEach-Object {
-    switch ($WhisperFeature) {
-        "cuda" {
-            if ($_ -match '^# (whisper-rs = \{ version = "0\.16", features = \["cuda"\].*)') {
-                $Matches[1]
-            } else { $_ }
-        }
-        "cpu" {
-            # CPU line has no features key — match the exact short form to avoid
-            # accidentally enabling cuda or metal
-            if ($_ -match '^# (whisper-rs = \{ version = "0\.16" \})$') {
-                $Matches[1]
-            } else { $_ }
-        }
-        default { $_ }
-    }
-}
-
-Set-Content -Path $CargoToml -Value $TomlLines -Encoding UTF8
-$ActiveLine = $TomlLines | Where-Object { $_ -match '^whisper-rs ' }
-if ($ActiveLine) {
-    Write-Ok "Cargo.toml patched — active line: $ActiveLine"
-} else {
-    Write-Warn "No active whisper-rs line found after patching — check $CargoToml manually."
-}
-
-& cargo build --manifest-path $CargoToml --release
+$LectArgs  = @("build", "--manifest-path", $CargoToml, "--release")
+if ($CraneFeature) { $LectArgs += @("--features", $CraneFeature) }
+Write-Host "Building lecturner [feature: $(if ($CraneFeature) { $CraneFeature } else { '(none — CPU)' })]…"
+& cargo @LectArgs
 
 $LecturnerBin = "$LecturnerDir\target\release\lecturner.exe"
 Write-Ok "lecturner built → $LecturnerBin"
