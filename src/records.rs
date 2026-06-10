@@ -170,10 +170,18 @@ impl RunRecord {
     /// Persist the current state of this record to `run.json` in `out_dir`.
     /// Rewrites the full file — called after each chunk so partial runs
     /// leave a valid file.
+    ///
+    /// Atomicity: written to `run.json.tmp` then renamed over `run.json`.
+    /// Rename within one directory is atomic on every platform we support
+    /// (Rust's `fs::rename` replaces an existing destination on Windows too),
+    /// so a crash or power loss mid-write can never leave a truncated
+    /// `run.json` — at worst it leaves a stale `.tmp` beside a good file.
     pub fn save(&self, out_dir: &std::path::Path) -> anyhow::Result<()> {
         let path = out_dir.join("run.json");
+        let tmp  = out_dir.join("run.json.tmp");
         let json = serde_json::to_string_pretty(self)?;
-        std::fs::write(&path, json)?;
+        std::fs::write(&tmp, json)?;
+        std::fs::rename(&tmp, &path)?;
         Ok(())
     }
 
@@ -182,5 +190,46 @@ impl RunRecord {
         let path = out_dir.join("run.json");
         let raw  = std::fs::read_to_string(&path)?;
         Ok(serde_json::from_str(&raw)?)
+    }
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Round-trips the atomic save path twice: the second save exercises
+    /// rename-over-existing-destination, which is the Windows-sensitive case.
+    #[test]
+    fn save_load_roundtrip_and_overwrite() {
+        let dir = std::env::temp_dir().join(format!(
+            "lecturner_records_test_{}", std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut rec = RunRecord::new("text.txt".into(), None);
+        rec.chunks.push(ChunkRecord {
+            ordinal: 1,
+            wav: "paragraph_001.wav".into(),
+            trailing_boundary: Some(Boundary::Paragraph),
+            status: ChunkStatus::Ok,
+        });
+        rec.save(&dir).unwrap();
+
+        rec.chunks.push(ChunkRecord {
+            ordinal: 2,
+            wav: "paragraph_002.wav".into(),
+            trailing_boundary: None,
+            status: ChunkStatus::Quarantined { original_text: "oops".into() },
+        });
+        rec.save(&dir).unwrap(); // overwrite via rename
+
+        let loaded = RunRecord::load(&dir).unwrap();
+        assert_eq!(loaded.chunks.len(), 2);
+        assert_eq!(loaded.chunks[1].quarantined_text(), Some("oops"));
+        assert!(!dir.join("run.json.tmp").exists(), "tmp file should not linger");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
