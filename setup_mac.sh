@@ -11,7 +11,9 @@
 #        - Qwen3-TTS CustomVoice → Qwen3-TTS-12Hz-1.7B-CustomVoice/
 #        - Whisper ggml binary  → models/ggml-medium.en.bin
 #        - CMU dict             → cmudict.dict  (root of work dir)
-#   4. Clone + build lucasjinreal/Crane with the chosen feature flag
+#   4. Clone + build lucasjinreal/Crane — NO feature flag on macOS:
+#      crane-core hardwires Metal (Apple Silicon) / Accelerate (Intel)
+#      via target-specific deps; crane-oai has no "metal" feature
 #   5. Clone + build lecturner with the SAME feature flag.  Cargo features
 #      replaced the old comment-out-the-right-line Cargo.toml patching, so
 #      the repo stays clean and re-runs can git pull without conflict.
@@ -100,8 +102,11 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 ARCH=$(uname -m)
+# NB: this choice now applies ONLY to lecturner's Whisper validation
+# (whisper-rs gates Metal behind a feature flag).  Crane ignores it —
+# crane-core hardwires Metal/Accelerate by build target on macOS.
 if [[ "$ARCH" == "arm64" ]]; then
-    echo "  Apple Silicon detected. Options:"
+    echo "  Apple Silicon detected. Whisper validation backend:"
     echo "    1) Apple Metal  (recommended — ~6x faster than CPU on M-series)"
     echo "    2) CPU          (slower, works everywhere)"
     read -rp "Enter choice [1-2] (default: 1): " BACKEND_CHOICE
@@ -187,17 +192,20 @@ else
     git -C "$CRANE_DIR" pull --ff-only
 fi
 
-echo "Building crane-oai [feature: ${BACKEND_FEATURE:-'(none — CPU)'}]…"
-if [[ -n "$BACKEND_FEATURE" ]]; then
-    cargo build \
-        --manifest-path "$CRANE_DIR/Cargo.toml" \
-        -p crane-oai --release \
-        --features "$BACKEND_FEATURE"
-else
-    cargo build \
-        --manifest-path "$CRANE_DIR/Cargo.toml" \
-        -p crane-oai --release
-fi
+# Crane gets NO feature flag on macOS — and this is correct, not an omission.
+# crane-core's Cargo.toml selects the backend by build target:
+#   macos + aarch64 → candle with "metal"      (automatic, not a feature)
+#   macos + x86_64  → candle with "accelerate" (automatic)
+#   elsewhere       → CPU unless --features cuda
+# crane-oai's only named features are cuda / cudnn / mkl; passing
+# "--features metal" fails with: "the package 'crane-oai' does not contain
+# this feature".  Verified against crane-core/Cargo.toml 2026-06.
+# ($BACKEND_FEATURE still matters — lecturner's whisper-rs DOES gate Metal
+#  behind an explicit feature.  Two upstreams, two conventions.)
+echo "Building crane-oai (backend auto-selected by target: Metal on Apple Silicon)…"
+cargo build \
+    --manifest-path "$CRANE_DIR/Cargo.toml" \
+    -p crane-oai --release
 
 CRANE_BIN="$CRANE_DIR/target/release/crane-oai"
 ok "Crane built → $CRANE_BIN"
@@ -216,9 +224,10 @@ else
     git -C "$LECTURNER_DIR" pull --ff-only
 fi
 
-# Backend selection is a cargo feature (metal / none = CPU) — same flag we
-# just passed to Crane.  No Cargo.toml patching, so the repo stays clean and
-# the pull above never hits a dirty-tree conflict on re-runs.
+# Backend selection for lecturner IS a cargo feature (metal / none = CPU) —
+# unlike Crane above, whisper-rs gates Metal explicitly.  No Cargo.toml
+# patching, so the repo stays clean and the pull above never hits a
+# dirty-tree conflict on re-runs.
 CARGO_TOML="$LECTURNER_DIR/Cargo.toml"
 echo "Building lecturner [feature: ${BACKEND_FEATURE:-'(none — CPU)'}]…"
 if [[ -n "$BACKEND_FEATURE" ]]; then

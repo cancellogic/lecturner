@@ -56,10 +56,12 @@ cd Crane
 # Windows / Linux with CUDA:   !HINT: use developer command prompt 
 cargo build -p crane-oai --release --features cuda
 
-# macOS Apple Silicon (Metal):
-cargo build -p crane-oai --release --features metal
+# macOS (Apple Silicon or Intel) — no feature flag:
+# crane-core auto-selects Metal (arm64) / Accelerate (x86_64) by build
+# target; crane-oai has no "metal" feature and will reject one.
+cargo build -p crane-oai --release
 
-# CPU only:
+# CPU only (Windows / Linux):
 cargo build -p crane-oai --release
 ```
 
