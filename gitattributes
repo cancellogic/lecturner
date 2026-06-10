@@ -1,0 +1,7 @@
+# Line-ending policy: bash dies on CRLF ("syntax error near unexpected token"),
+# so shell/Rust/TOML stay LF even when edited on Windows.  PowerShell keeps CRLF.
+*.sh   text eol=lf
+*.rs   text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.ps1  text eol=crlf

@@ -14,7 +14,7 @@ name = "lecturner"
 path = "src/main.rs"
 
 [dependencies]
-reqwest    = { version = "=0.11.27", features = ["blocking", "json"] }  # 0.11.x pin is load-bearing: last blocking-API series
+reqwest    = { version = "=0.11.27", features = ["blocking", "json"] }  # pinned to the version the pipeline was tested against; the blocking API also exists in 0.12+ — unpin when convenient
 serde      = { version = "1",        features = ["derive"] }
 serde_json = "1"
 clap       = { version = "4",        features = ["derive"] }
@@ -22,15 +22,18 @@ anyhow     = "1"
 toml       = "1"
 chrono     = { version = "0.4",      features = ["serde"] }
 pdfsink-rs = "0.2"   # pure-Rust PDF word-bbox extraction; replaces pdf_rip.py
+whisper-rs = "0.16"  # backend selected via [features] below — never edit this line
 
-# ── Whisper validation ─────────────────────────────────────────────────────────
-# Platform feature flags — uncomment EXACTLY ONE line that matches your hardware.
+# ── Whisper backend selection ──────────────────────────────────────────────────
+# Pick the backend at build time with a feature flag — same shape as Crane:
 #
-# Windows / Linux with NVIDIA GPU (CUDA):
-whisper-rs = { version = "0.16", features = ["cuda"] }
+#   cargo build --release --features cuda     Windows / Linux + NVIDIA GPU
+#   cargo build --release --features metal    macOS Apple Silicon
+#   cargo build --release                     CPU-only (any platform, slower)
 #
-# macOS Apple Silicon (Metal):
-# whisper-rs = { version = "0.16", features = ["metal"] }
-#
-# CPU-only (any platform, slower):
-# whisper-rs = { version = "0.16" }
+# This replaces the old comment-out-the-right-line dance, which required the
+# setup scripts to patch this file (and left the git tree dirty on re-runs).
+[features]
+default = []
+cuda    = ["whisper-rs/cuda"]
+metal   = ["whisper-rs/metal"]
