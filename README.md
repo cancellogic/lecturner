@@ -30,7 +30,9 @@ files in the 'in' folder will be moved on completion.
 
 **Before you begin you need**
 - **Windows**: MSVC build tools (Visual Studio Build Tools, C++ workload) + CUDA toolkit
-- **macOS**: `xcode-select --install`
+- **macOS**: `xcode-select --install'
+              at this moment, lecturner mac metal version uses 4x more memory than cuda running the same model.  A background Llama.cpp server
+              is a fix if you don't have ~32gb:  llama-server -m checkpoints/Qwen3-4B-GGUF/Qwen3-4B-Q6_K.gguf --port 8101 -ngl 99
 - **Linux**: `apt install build-essential libclang-dev` + CUDA toolkit if using GPU.
  
 Note that there are setup scripts for each os.  The linux version supports Debian/Ubuntu (it exits with manual-install pointers on other distros).  With caution, I
